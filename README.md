@@ -1,3 +1,3 @@
 # FlowDocB1
 
-Documentation and workflow project.
+Flow Doc to Business One Connector
