@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { sapB1Client } from '../services/sapb1';
+import { config } from '../config';
 
 const router = Router();
 
@@ -22,11 +23,12 @@ router.post('/api/sap/check-vendor', async (req: Request, res: Response) => {
     return res.json({
       found: vendor !== null,
       vendor: vendor || null,
+      companyDb: config.sapB1.companyDb,
     });
   } catch (error: any) {
     console.error('[SAP CheckVendor] Error:', error.message);
     const sapError = error.response?.data?.error?.message?.value || error.message;
-    return res.status(502).json({ error: sapError });
+    return res.status(502).json({ error: sapError, companyDb: config.sapB1.companyDb });
   } finally {
     if (sessionId) {
       try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
@@ -57,6 +59,7 @@ router.post('/api/sap/create-vendor', async (req: Request, res: Response) => {
         alreadyExists: true,
         cardCode: existing.CardCode,
         cardName: existing.CardName,
+        companyDb: config.sapB1.companyDb,
       });
     }
 
@@ -67,11 +70,12 @@ router.post('/api/sap/create-vendor', async (req: Request, res: Response) => {
       created: true,
       cardCode: result.CardCode,
       cardName: result.CardName,
+      companyDb: config.sapB1.companyDb,
     });
   } catch (error: any) {
     console.error('[SAP CreateVendor] Error:', error.message);
     const sapError = error.response?.data?.error?.message?.value || error.message;
-    return res.status(502).json({ error: sapError });
+    return res.status(502).json({ error: sapError, companyDb: config.sapB1.companyDb });
   } finally {
     if (sessionId) {
       try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
