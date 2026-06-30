@@ -519,9 +519,9 @@ async function loadFileDetail(filename) {
     // Wire up "Add to SAP" buttons
     document.querySelectorAll('.sap-add-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const button = e.target as HTMLButtonElement;
-        const rnc = button.dataset.rnc!;
-        const nombre = button.dataset.name!;
+        const button = e.target;
+        const rnc = button.dataset.rnc || '';
+        const nombre = button.dataset.name || '';
         const email = button.dataset.email;
         const telefono = button.dataset.phone;
         const originalText = button.textContent;
@@ -559,7 +559,7 @@ async function loadFileDetail(filename) {
           } else {
             throw new Error(createData.error || 'Unknown error');
           }
-        } catch (err: any) {
+        } catch (err) {
           button.textContent = '❌ Failed';
           button.style.background = 'var(--accent4)';
           button.title = err.message;
