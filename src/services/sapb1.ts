@@ -274,7 +274,7 @@ export class SapB1Client {
 
   /**
    * Attaches a document to a Purchase Invoice in SAP B1.
-   * The file content should be base64-encoded.
+   * Posts file content as base64 directly in the Attachments2_Lines.
    */
   async attachDocument(
     docEntry: number,
@@ -286,8 +286,7 @@ export class SapB1Client {
     const ext = fileName.split('.').pop() || 'pdf';
     const today = new Date().toISOString().split('T')[0];
 
-    // Step 1: Create attachment entry (without file content)
-    const metaPayload = {
+    const payload = {
       AttachmentEntry: null,
       FileName: fileName,
       SourceObjectType: '18',   // 18 = Purchase Invoice
@@ -295,67 +294,29 @@ export class SapB1Client {
       UserSignature: config.sapB1.username,
       Attachments2_Lines: [
         {
-          SourcePath: null,
           FileName: fileName,
           FileExtension: ext,
           AttachmentDate: today,
           Override: 'tNO',
           FreeText: 'FlowDoc invoice document',
+          SourcePath: '',
+          AttachmentContent: fileContentBase64,
         },
       ],
     };
 
-    console.log(`[SAP] Step 1: Creating attachment entry for DocEntry ${docEntry}: ${fileName}`);
-    console.log(`[SAP] Metadata payload:`, JSON.stringify(metaPayload, null, 2));
+    console.log(`[SAP] Attaching doc to DocEntry ${docEntry}: ${fileName} (${(fileContentBase64.length / 1024).toFixed(1)} KB base64)`);
 
-    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
-    console.log(`[SAP] Attachment entry created:`, JSON.stringify(metaResult, null, 2));
-
-    // Step 2: Upload file bytes to the attachment line
-    const attachmentEntry = metaResult.AbsoluteEntry || metaResult.Attachments2_Lines?.[0]?.AttachmentEntry;
-    if (!attachmentEntry) {
-      console.error(`[SAP] No AttachmentEntry returned from metadata creation. Response:`, JSON.stringify(metaResult));
-      return;
-    }
-    console.log(`[SAP] Step 2: Uploading file bytes to AttachmentEntry ${attachmentEntry}`);
-
-    const fileBuffer = Buffer.from(fileContentBase64, 'base64');
-
-    // Upload via PATCH to the attachment line with raw bytes
-    const client = this.createClient();
     try {
-      await client.patch(
-        `/Attachments2(${attachmentEntry})`,
-        { Attachments2_Lines: [{ AttachmentEntry: attachmentEntry, FileContent: fileContentBase64 }] },
-        {
-          headers: {
-            Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      console.log(`[SAP] File bytes uploaded successfully (PATCH) for AttachmentEntry ${attachmentEntry}`);
-    } catch (patchErr: any) {
-      const msg = patchErr.response?.data?.error?.message?.value || patchErr.message;
-      console.error(`[SAP] PATCH upload failed: ${msg}`);
-
-      // Try alternative: send as raw binary via $value endpoint
-      try {
-        await client.post(
-          `/Attachments2(${attachmentEntry})/$value`,
-          fileBuffer,
-          {
-            headers: {
-              Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
-              'Content-Type': mimeType || 'application/octet-stream',
-            },
-          }
-        );
-        console.log(`[SAP] Binary upload succeeded for AttachmentEntry ${attachmentEntry}`);
-      } catch (binaryErr: any) {
-        const binMsg = binaryErr.response?.data?.error?.message?.value || binaryErr.message;
-        console.error(`[SAP] Binary upload also failed: ${binMsg}`);
+      const result = await this.post('/Attachments2', payload, sessionId);
+      console.log(`[SAP] Attachment created — response:`, JSON.stringify(result, null, 2));
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Attachment FAILED: ${sapErr}`);
+      if (err.response?.data) {
+        console.error(`[SAP] Full SAP error:`, JSON.stringify(err.response.data, null, 2));
       }
+      // Non-fatal — invoice was created
     }
   }
 }
