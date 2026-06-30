@@ -288,9 +288,8 @@ export class SapB1Client {
     const today = new Date().toISOString().split('T')[0];
     const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment entry (no file content — SAP doesn't accept AttachmentContent)
+    // Step 1: Create attachment entry (metadata only, no AttachmentEntry field)
     const metaPayload = {
-      AttachmentEntry: null,
       FileName: fileName,
       SourceObjectType: '18',   // 18 = Purchase Invoice
       SourceObjectKey: String(docEntry),
@@ -302,7 +301,6 @@ export class SapB1Client {
           AttachmentDate: today,
           Override: 'tNO',
           FreeText: 'FlowDoc invoice document',
-          SourcePath: '',
         },
       ],
     };
