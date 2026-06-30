@@ -288,11 +288,8 @@ export class SapB1Client {
     const today = new Date().toISOString().split('T')[0];
     const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment entry for SAP B1 10
+    // Step 1: Create attachment via OData navigation (SAP 10)
     const metaPayload = {
-      SourceObjectType: '18',
-      SourceObjectKey: String(docEntry),
-      UserSignature: config.sapB1.username,
       Attachments2_Lines: [{
         FileName: fileName,
         FileExtension: ext,
@@ -305,7 +302,13 @@ export class SapB1Client {
 
     console.log(`[SAP] Step 1: Creating attachment for DocEntry ${docEntry}: ${fileName}`);
     console.log(`[SAP] Payload:`, JSON.stringify(metaPayload, null, 2));
-    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
+
+    // SAP 10: attach via PurchaseInvoices navigation property
+    const metaResult = await this.post(
+      `/PurchaseInvoices(${docEntry})/Attachments2`,
+      metaPayload,
+      sessionId
+    );
     console.log(`[SAP] Attachment entry response:`, JSON.stringify(metaResult, null, 2));
 
     const attachmentEntry = metaResult.AbsoluteEntry
@@ -317,12 +320,12 @@ export class SapB1Client {
       return;
     }
 
-    // Step 2: Upload raw file bytes
+    // Step 2: Upload raw file bytes via same navigation path
     console.log(`[SAP] Step 2: Uploading ${fileBuffer.length} bytes to AttachmentEntry ${attachmentEntry}`);
     const client = this.createClient();
     try {
       await client.post(
-        `/Attachments2(${attachmentEntry})/$value`,
+        `/PurchaseInvoices(${docEntry})/Attachments2(${attachmentEntry})/$value`,
         fileBuffer,
         {
           headers: {
