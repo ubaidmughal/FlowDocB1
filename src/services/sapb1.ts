@@ -291,7 +291,7 @@ export class SapB1Client {
     // Step 1: Create attachment entry (minimal payload — only what SAP accepts)
     const metaPayload = {
       SourceObjectType: '18',   // 18 = Purchase Invoice
-      SourceObjectKey: String(docEntry),
+      SourceObjectKey: docEntry,
       UserSignature: config.sapB1.username,
       Attachments2_Lines: [
         {
