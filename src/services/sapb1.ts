@@ -288,9 +288,8 @@ export class SapB1Client {
     const today = new Date().toISOString().split('T')[0];
     const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment entry (metadata only, no AttachmentEntry field)
+    // Step 1: Create attachment entry (minimal payload — only what SAP accepts)
     const metaPayload = {
-      FileName: fileName,
       SourceObjectType: '18',   // 18 = Purchase Invoice
       SourceObjectKey: String(docEntry),
       UserSignature: config.sapB1.username,
