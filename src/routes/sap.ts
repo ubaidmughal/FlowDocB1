@@ -154,7 +154,12 @@ router.post('/api/sap/post-invoice', async (req: Request, res: Response) => {
         );
         documentAttached = true;
       } catch (docErr: any) {
-        console.error(`[SAP] Document attachment warning: ${docErr.message}`);
+        const status = docErr.response?.status;
+        const body = docErr.response?.data;
+        console.error(`[SAP] Document download FAILED (HTTP ${status || 'N/A'}): ${docErr.message}`);
+        if (body) {
+          console.error(`[SAP] FlowDoc response:`, typeof body === 'string' ? body.substring(0, 500) : JSON.stringify(body).substring(0, 500));
+        }
         // Non-fatal — invoice was created
       }
     }

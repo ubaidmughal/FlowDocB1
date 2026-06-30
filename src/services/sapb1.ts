@@ -243,7 +243,7 @@ export class SapB1Client {
       DocumentLines: (invoice.lineItems || []).map((item, idx) => ({
         ItemDescription: item.descripcion?.substring(0, 200) || 'Invoice line',
         Quantity: item.cantidad || 1,
-        UnitPrice: item.precio || 0,
+        UnitPrice: (item.cantidad || 1) * (item.precio || 0),
         AccountCode: invoice.glAccount || '_SYS00000000105',
         CostingCode: invoice.costCenter || '',
         TaxCode: item.itbisPct > 0 ? 'ITBIS' : 'EXENTO',
