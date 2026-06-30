@@ -103,6 +103,25 @@ export class FlowDocClient {
     const response = await this.client.get(`/api/invoices/${invoiceId}`);
     return response.data;
   }
+
+  /**
+   * Downloads the invoice document from FlowDoc.
+   * Returns the raw bytes, content type, and original filename from headers.
+   */
+  async getDocument(invoiceId: string): Promise<{ data: Buffer; contentType: string; filename: string }> {
+    const response = await this.client.get(`/api/documents/${invoiceId}`, {
+      params: { download: '1' },
+      responseType: 'arraybuffer',
+    });
+    const disposition: string = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?(.+?)"?$/);
+    const filename = match ? match[1] : `invoice-${invoiceId}.pdf`;
+    return {
+      data: Buffer.from(response.data),
+      contentType: String(response.headers['content-type'] || 'application/octet-stream'),
+      filename,
+    };
+  }
 }
 
 /** Shared singleton instance */

@@ -336,13 +336,14 @@ async function showInvoiceDetail(invoiceId) {
       <div class="detail-section">
         <h3>Documents (${docs.length})</h3>
         <table class="invoice-table">
-          <thead><tr><th>Filename</th><th>Type</th><th>Size</th><th>Primary</th></tr></thead>
+          <thead><tr><th>Filename</th><th>Type</th><th>Size</th><th>Primary</th><th style="width:100px;">Download</th></tr></thead>
           <tbody>${docs.map(d => `
             <tr>
               <td>${d.filename}</td>
               <td>${d.mime_type}</td>
               <td>${(d.file_size_bytes / 1024).toFixed(1)} KB</td>
               <td>${d.is_primary ? '<span class="status-badge green">✓</span>' : ''}</td>
+              <td><a href="/api/ui/document-download/${encodeURIComponent(invoiceId)}" download="${d.filename}" style="color:var(--accent);text-decoration:none;font-size:12px;">⬇ Download</a></td>
             </tr>
           `).join('')}</tbody>
         </table>

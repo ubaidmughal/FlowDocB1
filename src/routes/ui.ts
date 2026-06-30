@@ -131,4 +131,27 @@ router.get('/api/ui/invoice-detail/:invoiceId', async (req: Request, res: Respon
   }
 });
 
+/**
+ * GET /api/ui/document-download/:invoiceId
+ * Proxies FlowDoc's GET /api/documents/:id?download=1 and streams the file.
+ */
+router.get('/api/ui/document-download/:invoiceId', async (req: Request, res: Response) => {
+  try {
+    const result = await flowDocClient.getDocument(req.params.invoiceId);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Content-Length', result.data.length);
+    return res.send(result.data);
+  } catch (error: any) {
+    console.error('[DocumentDownload] Error:', error.message);
+    if (error.response) {
+      return res.status(error.response.status).json({
+        error: 'FlowDoc API error',
+        status: error.response.status,
+      });
+    }
+    return res.status(502).json({ error: error.message });
+  }
+});
+
 export default router;
