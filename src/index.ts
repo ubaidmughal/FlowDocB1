@@ -3,6 +3,7 @@ import path from 'path';
 import { config } from './config';
 import queueRoutes from './routes/queue';
 import uiRoutes from './routes/ui';
+import sapRoutes from './routes/sap';
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Routes
 app.use(queueRoutes);
 app.use(uiRoutes);
+app.use(sapRoutes);
 
 // Start
 app.listen(config.server.port, () => {

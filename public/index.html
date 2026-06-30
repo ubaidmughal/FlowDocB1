@@ -492,10 +492,11 @@ async function loadFileDetail(filename) {
     // Vendors tab
     const vendors = [...new Map((data.items || []).map(i => [i.vendor_rnc, i])).values()];
     document.getElementById('tab-vendors').innerHTML = `
-      <table class="invoice-table">
-        <thead><tr><th>RNC</th><th>Name</th><th>ERP Code</th><th>Email</th><th>Phone</th><th>Qty</th></tr></thead>
+      <table class="invoice-table" id="vendor-table">
+        <thead><tr><th>RNC</th><th>Name</th><th>ERP Code</th><th>Email</th><th>Phone</th><th>Qty</th><th style="width:120px;">SAP Action</th></tr></thead>
         <tbody>${vendors.map(v => {
           const count = (data.items || []).filter(i => i.vendor_rnc === v.vendor_rnc).length;
+          const hasCardCode = v.vendor_erp_card_code && v.vendor_erp_card_code !== 'null';
           return `
           <tr>
             <td>${v.vendor_rnc}</td>
@@ -504,10 +505,73 @@ async function loadFileDetail(filename) {
             <td>${v.vendor_email || '<span style="color:var(--muted)">—</span>'}</td>
             <td>${v.vendor_telefono || '<span style="color:var(--muted)">—</span>'}</td>
             <td>${count}</td>
+            <td>
+              ${hasCardCode
+                ? '<span style="color:var(--accent2);font-size:12px;">✓ In SAP</span>'
+                : `<button class="sap-add-btn" data-rnc="${v.vendor_rnc}" data-name="${v.vendor_nombre.replace(/"/g, '&quot;')}" data-email="${v.vendor_email || ''}" data-phone="${v.vendor_telefono || ''}" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Add to SAP</button>`
+              }
+            </td>
           </tr>`;
         }).join('')}</tbody>
       </table>
     `;
+
+    // Wire up "Add to SAP" buttons
+    document.querySelectorAll('.sap-add-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const button = e.target as HTMLButtonElement;
+        const rnc = button.dataset.rnc!;
+        const nombre = button.dataset.name!;
+        const email = button.dataset.email;
+        const telefono = button.dataset.phone;
+        const originalText = button.textContent;
+
+        button.textContent = '⏳ Checking...';
+        button.disabled = true;
+
+        try {
+          // Step 1: Check if vendor exists in SAP
+          const checkRes = await fetch('/api/sap/check-vendor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rnc }),
+          });
+          const checkData = await checkRes.json();
+
+          if (checkData.found) {
+            button.textContent = '✓ Already exists';
+            button.style.background = 'var(--accent2)';
+            return;
+          }
+
+          // Step 2: Create vendor in SAP
+          button.textContent = '⏳ Creating...';
+          const createRes = await fetch('/api/sap/create-vendor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rnc, nombre, email, telefono }),
+          });
+          const createData = await createRes.json();
+
+          if (createData.created || createData.alreadyExists) {
+            button.textContent = `✓ ${createData.cardCode}`;
+            button.style.background = 'var(--accent2)';
+          } else {
+            throw new Error(createData.error || 'Unknown error');
+          }
+        } catch (err: any) {
+          button.textContent = '❌ Failed';
+          button.style.background = 'var(--accent4)';
+          button.title = err.message;
+          setTimeout(() => {
+            button.textContent = originalText;
+            button.style.background = 'var(--accent)';
+          }, 3000);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
 
     // Raw JSON tab
     document.getElementById('tab-raw').innerHTML = `<div class="json-viewer">${JSON.stringify(data, null, 2)}</div>`;

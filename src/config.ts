@@ -11,6 +11,7 @@ export const config = {
     companyDb: process.env.B1SL_COMPANY_DB || '',
     username: process.env.B1SL_USERNAME || '',
     password: process.env.B1SL_PASSWORD || '',
+    tlsRejectUnauthorized: process.env.B1SL_TLS_REJECT_UNAUTHORIZED !== 'false',
   },
   server: {
     port: parseInt(process.env.PORT || '3000', 10),
