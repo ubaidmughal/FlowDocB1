@@ -15,7 +15,7 @@ export interface BusinessPartner {
   CardName: string;
   CardType: string;
   FederalTaxID: string;
-  AddID: string;
+  LicTradNum: string;
   Currency: string;
 }
 
@@ -105,16 +105,16 @@ export class SapB1Client {
   }
 
   /**
-   * Finds a vendor (BusinessPartner) by RNC using AddID.
-   * FlowDoc vendor RNC ↔ SAP OCRD.AddID
+   * Finds a vendor (BusinessPartner) by RNC using LicTradNum.
+   * FlowDoc vendor RNC ↔ SAP OCRD.LicTradNum
    * Returns the CardCode if found, null otherwise.
    */
   async findVendorByRnc(rnc: string, sessionId: string): Promise<BusinessPartner | null> {
     const cleanRnc = rnc.replace(/\D/g, '');
     const encodedRnc = encodeURIComponent(cleanRnc);
-    console.log(`[SAP] Searching vendor by AddID: ${cleanRnc}`);
+    console.log(`[SAP] Searching vendor by LicTradNum: ${cleanRnc}`);
     const data = await this.get(
-      `/BusinessPartners?$filter=AddID eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
+      `/BusinessPartners?$filter=LicTradNum eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
       sessionId
     );
 
@@ -123,7 +123,7 @@ export class SapB1Client {
       console.log(`[SAP] Vendor found — CardCode: ${bp.CardCode}, Name: ${bp.CardName}`);
       return bp;
     }
-    console.log(`[SAP] Vendor not found by AddID: ${cleanRnc}`);
+    console.log(`[SAP] Vendor not found by LicTradNum: ${cleanRnc}`);
     return null;
   }
 
@@ -144,7 +144,7 @@ export class SapB1Client {
       CardCode: cardCode,
       CardName: vendor.nombre.substring(0, 100),
       CardType: 'cSupplier',
-      AddID: cleanRnc,
+      LicTradNum: cleanRnc,
       FederalTaxID: cleanRnc,
       Currency: '##', // all currencies
       EmailAddress: vendor.email || '',
