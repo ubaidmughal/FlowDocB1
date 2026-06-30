@@ -39,10 +39,10 @@ router.post('/api/sap/check-vendor', async (req: Request, res: Response) => {
 /**
  * POST /api/sap/create-vendor
  * Creates a vendor in SAP B1.
- * Body: { rnc, nombre, email?, telefono? }
+ * Body: { rnc, nombre, email?, telefono?, direccion? }
  */
 router.post('/api/sap/create-vendor', async (req: Request, res: Response) => {
-  const { rnc, nombre, email, telefono } = req.body;
+  const { rnc, nombre, email, telefono, direccion } = req.body;
   if (!rnc || !nombre) {
     return res.status(400).json({ error: 'rnc and nombre are required' });
   }
@@ -64,7 +64,7 @@ router.post('/api/sap/create-vendor', async (req: Request, res: Response) => {
     }
 
     // Create new vendor
-    const result = await sapB1Client.createVendor({ rnc, nombre, email, telefono }, sessionId);
+    const result = await sapB1Client.createVendor({ rnc, nombre, email, telefono, direccion }, sessionId);
 
     return res.json({
       created: true,

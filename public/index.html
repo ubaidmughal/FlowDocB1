@@ -519,7 +519,7 @@ async function loadFileDetail(filename) {
             <td>
               ${hasCardCode
                 ? '<span style="color:var(--accent2);font-size:12px;">✓ In SAP</span>'
-                : `<button class="sap-add-btn" data-rnc="${v.vendor_rnc}" data-name="${v.vendor_nombre.replace(/"/g, '&quot;')}" data-email="${v.vendor_email || ''}" data-phone="${v.vendor_telefono || ''}" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Add to SAP</button>`
+                : `<button class="sap-add-btn" data-rnc="${v.vendor_rnc}" data-name="${v.vendor_nombre.replace(/"/g, '&quot;')}" data-email="${v.vendor_email || ''}" data-phone="${v.vendor_telefono || ''}" data-direccion="" style="background:var(--accent);color:#fff;border:none;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer;">Add to SAP</button>`
               }
             </td>
           </tr>`;
@@ -535,6 +535,7 @@ async function loadFileDetail(filename) {
         const nombre = button.dataset.name || '';
         const email = button.dataset.email;
         const telefono = button.dataset.phone;
+        const direccion = button.dataset.direccion || '';
         const originalText = button.textContent;
         const originalBg = button.style.background;
 
@@ -583,7 +584,7 @@ async function loadFileDetail(filename) {
           const createRes = await fetch('/api/sap/create-vendor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rnc, nombre, email, telefono }),
+            body: JSON.stringify({ rnc, nombre, email, telefono, direccion }),
           });
           const createData = await createRes.json();
 

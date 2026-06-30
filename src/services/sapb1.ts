@@ -133,7 +133,7 @@ export class SapB1Client {
    * FederalTaxID (OCRD.LicTradNum) is set to the FlowDoc RNC for linking.
    */
   async createVendor(
-    vendor: { rnc: string; nombre: string; email?: string; telefono?: string },
+    vendor: { rnc: string; nombre: string; email?: string; telefono?: string; direccion?: string },
     sessionId: string
   ): Promise<{ CardCode: string; CardName: string }> {
     // Strip non-numeric chars for clean SAP-friendly format
@@ -148,6 +148,7 @@ export class SapB1Client {
       Currency: '##', // all currencies
       EmailAddress: vendor.email || '',
       Phone1: vendor.telefono || '',
+      Address: vendor.direccion || '',
     };
 
     console.log(`[SAP] Creating vendor — CardCode: ${cardCode}, RNC: ${cleanRnc}, Name: ${vendor.nombre}`);
