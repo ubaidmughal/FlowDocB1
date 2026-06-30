@@ -288,11 +288,10 @@ export class SapB1Client {
     const today = new Date().toISOString().split('T')[0];
     const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment entry (minimal payload — only what SAP accepts)
+    // Step 1: Create attachment entry
     const metaPayload = {
-      SourceObjectType: '18',   // 18 = Purchase Invoice
+      SourceObjectType: 18,   // 18 = Purchase Invoice (number, not string)
       SourceObjectKey: docEntry,
-      UserSignature: config.sapB1.username,
       Attachments2_Lines: [
         {
           FileName: fileName,
@@ -305,7 +304,15 @@ export class SapB1Client {
     };
 
     console.log(`[SAP] Step 1: Creating attachment entry for DocEntry ${docEntry}: ${fileName}`);
-    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
+    let metaResult: any;
+    try {
+      metaResult = await this.post('/Attachments2', metaPayload, sessionId);
+    } catch (metaErr: any) {
+      // Fallback: try without UserSignature, or try older Attachments endpoint
+      const msg = metaErr.response?.data?.error?.message?.value || metaErr.message;
+      console.error(`[SAP] Attachments2 failed: ${msg}, trying /Attachments...`);
+      metaResult = await this.post('/Attachments', metaPayload, sessionId);
+    }
     console.log(`[SAP] Attachment entry response:`, JSON.stringify(metaResult, null, 2));
 
     const attachmentEntry = metaResult.AbsoluteEntry
