@@ -110,7 +110,9 @@ export class SapB1Client {
    * Returns the CardCode if found, null otherwise.
    */
   async findVendorByRnc(rnc: string, sessionId: string): Promise<BusinessPartner | null> {
-    const encodedRnc = encodeURIComponent(rnc);
+    const cleanRnc = rnc.replace(/\D/g, '');
+    const encodedRnc = encodeURIComponent(cleanRnc);
+    console.log(`[SAP] Searching vendor by LicTradNum: ${cleanRnc}`);
     const data = await this.get(
       `/BusinessPartners?$filter=LicTradNum eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
       sessionId
@@ -118,8 +120,10 @@ export class SapB1Client {
 
     if (data.value && data.value.length > 0) {
       const bp = data.value[0] as BusinessPartner;
+      console.log(`[SAP] Vendor found — CardCode: ${bp.CardCode}, Name: ${bp.CardName}`);
       return bp;
     }
+    console.log(`[SAP] Vendor not found by LicTradNum: ${cleanRnc}`);
     return null;
   }
 
@@ -131,25 +135,39 @@ export class SapB1Client {
     vendor: { rnc: string; nombre: string; email?: string; telefono?: string },
     sessionId: string
   ): Promise<{ CardCode: string; CardName: string }> {
-    const cardCode = `V${vendor.rnc}`;
+    // Strip non-numeric chars and leading zeros for SAP-friendly RNC format
+    const cleanRnc = vendor.rnc.replace(/\D/g, '');
+    const cardCode = `V${cleanRnc}`;
 
     const payload = {
       CardCode: cardCode,
       CardName: vendor.nombre.substring(0, 100),
       CardType: 'cSupplier',
-      LicTradNum: vendor.rnc,
-      FederalTaxID: vendor.rnc,
+      LicTradNum: cleanRnc,
+      FederalTaxID: cleanRnc,
       Currency: '##', // all currencies
       EmailAddress: vendor.email || '',
       Phone1: vendor.telefono || '',
     };
 
-    const data = await this.post('/BusinessPartners', payload, sessionId);
+    console.log(`[SAP] Creating vendor — CardCode: ${cardCode}, RNC: ${cleanRnc}, Name: ${vendor.nombre}`);
+    console.log(`[SAP] Payload:`, JSON.stringify(payload, null, 2));
 
-    return {
-      CardCode: data.CardCode || cardCode,
-      CardName: data.CardName || vendor.nombre,
-    };
+    try {
+      const data = await this.post('/BusinessPartners', payload, sessionId);
+      console.log(`[SAP] Vendor created — CardCode: ${data.CardCode}, CardName: ${data.CardName}`);
+      return {
+        CardCode: data.CardCode || cardCode,
+        CardName: data.CardName || vendor.nombre,
+      };
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Vendor creation FAILED for RNC ${cleanRnc}: ${sapErr}`);
+      if (err.response?.data) {
+        console.error(`[SAP] Full SAP response:`, JSON.stringify(err.response.data, null, 2));
+      }
+      throw err;
+    }
   }
 }
 
