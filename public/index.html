@@ -541,7 +541,13 @@ async function loadFileDetail(filename) {
         const showNotify = (msg, type) => {
           const bar = document.getElementById('notify-bar');
           bar.className = 'notify-bar ' + type;
-          bar.innerHTML = '<span class="close-notify" onclick="this.parentElement.className=\\'notify-bar\\'">✕</span>' + msg;
+          bar.textContent = '';
+          const closeBtn = document.createElement('span');
+          closeBtn.className = 'close-notify';
+          closeBtn.textContent = '✕';
+          closeBtn.onclick = function() { bar.className = 'notify-bar'; };
+          bar.appendChild(closeBtn);
+          bar.appendChild(document.createTextNode(msg));
           bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           setTimeout(() => { if (bar.className.includes(type)) bar.className = 'notify-bar'; }, 8000);
         };
