@@ -46,15 +46,27 @@ export class SapB1Client {
    */
   async login(): Promise<string> {
     const client = this.createClient();
-    const response = await client.post<{ SessionId: string; Version: string; SessionTimeout: number }>(
-      '/Login',
-      {
-        CompanyDB: config.sapB1.companyDb,
-        UserName: config.sapB1.username,
-        Password: config.sapB1.password,
+    console.log(`[SAP] Logging into ${config.sapB1.baseUrl}/Login (DB: ${config.sapB1.companyDb}, TLS verify: ${config.sapB1.tlsRejectUnauthorized})`);
+    try {
+      const response = await client.post<{ SessionId: string; Version: string; SessionTimeout: number }>(
+        '/Login',
+        {
+          CompanyDB: config.sapB1.companyDb,
+          UserName: config.sapB1.username,
+          Password: config.sapB1.password,
+        }
+      );
+      console.log(`[SAP] Login OK — SessionId: ${response.data.SessionId.substring(0, 12)}...`);
+      return response.data.SessionId;
+    } catch (err: any) {
+      const status = err.response?.status;
+      const msg = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Login FAILED (HTTP ${status || 'N/A'}): ${msg}`);
+      if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ECONNRESET') {
+        console.error(`[SAP] Connection error — is the SAP server reachable at ${config.sapB1.baseUrl}?`);
       }
-    );
-    return response.data.SessionId;
+      throw err;
+    }
   }
 
   /**
