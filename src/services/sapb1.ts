@@ -105,6 +105,20 @@ export class SapB1Client {
   }
 
   /**
+   * Performs an authenticated PATCH request to SAP Service Layer.
+   */
+  private async patch(path: string, body: any, sessionId: string): Promise<any> {
+    const client = this.createClient();
+    const response = await client.patch(path, body, {
+      headers: {
+        Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  }
+
+  /**
    * Finds a vendor (BusinessPartner) by RNC using FederalTaxID.
    * SAP Service Layer FederalTaxID ↔ SAP DB OCRD.LicTradNum ↔ FlowDoc RNC
    * Returns the CardCode if found, null otherwise.
@@ -272,7 +286,8 @@ export class SapB1Client {
     const ext = fileName.split('.').pop() || 'pdf';
     const today = new Date().toISOString().split('T')[0];
 
-    const payload = {
+    // Step 1: Create attachment entry (without file content)
+    const metaPayload = {
       AttachmentEntry: null,
       FileName: fileName,
       SourceObjectType: '18',   // 18 = Purchase Invoice
@@ -286,23 +301,61 @@ export class SapB1Client {
           AttachmentDate: today,
           Override: 'tNO',
           FreeText: 'FlowDoc invoice document',
-          AttachmentContent: fileContentBase64,
         },
       ],
     };
 
-    // Log payload size without the base64 content
-    const logPayload = { ...payload, Attachments2_Lines: [{ ...payload.Attachments2_Lines[0], AttachmentContent: `[${fileContentBase64.length} chars base64]` }] };
-    console.log(`[SAP] Attaching document to DocEntry ${docEntry}: ${fileName} (${mimeType})`);
-    console.log(`[SAP] Attachment payload:`, JSON.stringify(logPayload, null, 2));
+    console.log(`[SAP] Step 1: Creating attachment entry for DocEntry ${docEntry}: ${fileName}`);
+    console.log(`[SAP] Metadata payload:`, JSON.stringify(metaPayload, null, 2));
 
+    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
+    console.log(`[SAP] Attachment entry created:`, JSON.stringify(metaResult, null, 2));
+
+    // Step 2: Upload file bytes to the attachment line
+    const attachmentEntry = metaResult.AbsoluteEntry || metaResult.Attachments2_Lines?.[0]?.AttachmentEntry;
+    if (!attachmentEntry) {
+      console.error(`[SAP] No AttachmentEntry returned from metadata creation. Response:`, JSON.stringify(metaResult));
+      return;
+    }
+    console.log(`[SAP] Step 2: Uploading file bytes to AttachmentEntry ${attachmentEntry}`);
+
+    const fileBuffer = Buffer.from(fileContentBase64, 'base64');
+
+    // Upload via PATCH to the attachment line with raw bytes
+    const client = this.createClient();
     try {
-      await this.post('/Attachments2', payload, sessionId);
-      console.log(`[SAP] Document attached successfully to DocEntry ${docEntry}`);
-    } catch (err: any) {
-      const sapErr = err.response?.data?.error?.message?.value || err.message;
-      console.error(`[SAP] Attachment FAILED for DocEntry ${docEntry}: ${sapErr}`);
-      // Don't throw — invoice was created successfully, attachment is non-critical
+      await client.patch(
+        `/Attachments2(${attachmentEntry})`,
+        { Attachments2_Lines: [{ AttachmentEntry: attachmentEntry, FileContent: fileContentBase64 }] },
+        {
+          headers: {
+            Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      console.log(`[SAP] File bytes uploaded successfully (PATCH) for AttachmentEntry ${attachmentEntry}`);
+    } catch (patchErr: any) {
+      const msg = patchErr.response?.data?.error?.message?.value || patchErr.message;
+      console.error(`[SAP] PATCH upload failed: ${msg}`);
+
+      // Try alternative: send as raw binary via $value endpoint
+      try {
+        await client.post(
+          `/Attachments2(${attachmentEntry})/$value`,
+          fileBuffer,
+          {
+            headers: {
+              Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
+              'Content-Type': mimeType || 'application/octet-stream',
+            },
+          }
+        );
+        console.log(`[SAP] Binary upload succeeded for AttachmentEntry ${attachmentEntry}`);
+      } catch (binaryErr: any) {
+        const binMsg = binaryErr.response?.data?.error?.message?.value || binaryErr.message;
+        console.error(`[SAP] Binary upload also failed: ${binMsg}`);
+      }
     }
   }
 }
