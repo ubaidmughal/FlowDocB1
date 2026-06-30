@@ -432,6 +432,9 @@ async function loadFileList() {
 
 // ── Load File Detail ──
 async function loadFileDetail(filename) {
+  // If invoice detail view is open, hide it and return to tabs
+  hideInvoiceDetail();
+
   try {
     const res = await fetch(`/api/ui/saved-files/${encodeURIComponent(filename)}`);
     const data = await res.json();
