@@ -15,7 +15,7 @@ export interface BusinessPartner {
   CardName: string;
   CardType: string;
   FederalTaxID: string;
-  LicTradNum: string;
+  AddID: string;
   Currency: string;
 }
 
@@ -105,16 +105,16 @@ export class SapB1Client {
   }
 
   /**
-   * Finds a vendor (BusinessPartner) by RNC using LicTradNum.
-   * FlowDoc vendor RNC ↔ SAP OCRD.LicTradNum
+   * Finds a vendor (BusinessPartner) by RNC using AddID.
+   * FlowDoc vendor RNC ↔ SAP OCRD.AddID
    * Returns the CardCode if found, null otherwise.
    */
   async findVendorByRnc(rnc: string, sessionId: string): Promise<BusinessPartner | null> {
     const cleanRnc = rnc.replace(/\D/g, '');
     const encodedRnc = encodeURIComponent(cleanRnc);
-    console.log(`[SAP] Searching vendor by LicTradNum: ${cleanRnc}`);
+    console.log(`[SAP] Searching vendor by AddID: ${cleanRnc}`);
     const data = await this.get(
-      `/BusinessPartners?$filter=LicTradNum eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
+      `/BusinessPartners?$filter=AddID eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
       sessionId
     );
 
@@ -123,19 +123,20 @@ export class SapB1Client {
       console.log(`[SAP] Vendor found — CardCode: ${bp.CardCode}, Name: ${bp.CardName}`);
       return bp;
     }
-    console.log(`[SAP] Vendor not found by LicTradNum: ${cleanRnc}`);
+    console.log(`[SAP] Vendor not found by AddID: ${cleanRnc}`);
     return null;
   }
 
   /**
    * Creates a new vendor (BusinessPartner) in SAP B1.
    * CardCode is auto-generated as "V{rnc}".
+   * FlowDoc RNC is stored in OCRD.AddID for linking.
    */
   async createVendor(
     vendor: { rnc: string; nombre: string; email?: string; telefono?: string },
     sessionId: string
   ): Promise<{ CardCode: string; CardName: string }> {
-    // Strip non-numeric chars and leading zeros for SAP-friendly RNC format
+    // Strip non-numeric chars for clean SAP-friendly format
     const cleanRnc = vendor.rnc.replace(/\D/g, '');
     const cardCode = `V${cleanRnc}`;
 
@@ -143,7 +144,7 @@ export class SapB1Client {
       CardCode: cardCode,
       CardName: vendor.nombre.substring(0, 100),
       CardType: 'cSupplier',
-      LicTradNum: cleanRnc,
+      AddID: cleanRnc,
       FederalTaxID: cleanRnc,
       Currency: '##', // all currencies
       EmailAddress: vendor.email || '',

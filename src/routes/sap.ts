@@ -6,7 +6,7 @@ const router = Router();
 
 /**
  * POST /api/sap/check-vendor
- * Checks if a vendor exists in SAP B1 by RNC (LicTradNum).
+ * Checks if a vendor exists in SAP B1 by RNC (AddID).
  * Body: { rnc: string }
  */
 router.post('/api/sap/check-vendor', async (req: Request, res: Response) => {
