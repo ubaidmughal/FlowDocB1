@@ -83,4 +83,75 @@ router.post('/api/sap/create-vendor', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/sap/check-invoice
+ * Checks if an invoice NCF already exists in SAP Purchase Invoices.
+ * Body: { ncf: string }
+ */
+router.post('/api/sap/check-invoice', async (req: Request, res: Response) => {
+  const { ncf } = req.body;
+  if (!ncf) {
+    return res.status(400).json({ error: 'ncf is required' });
+  }
+
+  let sessionId: string | null = null;
+  try {
+    sessionId = await sapB1Client.login();
+    const exists = await sapB1Client.checkDuplicateNcf(ncf, sessionId);
+    return res.json({ exists, ncf, companyDb: config.sapB1.companyDb });
+  } catch (error: any) {
+    console.error('[SAP CheckInvoice] Error:', error.message);
+    const sapError = error.response?.data?.error?.message?.value || error.message;
+    return res.status(502).json({ error: sapError, companyDb: config.sapB1.companyDb });
+  } finally {
+    if (sessionId) {
+      try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
+    }
+  }
+});
+
+/**
+ * POST /api/sap/post-invoice
+ * Creates a Purchase Invoice in SAP B1 from FlowDoc invoice data.
+ */
+router.post('/api/sap/post-invoice', async (req: Request, res: Response) => {
+  const invoice = req.body;
+  if (!invoice.cardCode || !invoice.ncf) {
+    return res.status(400).json({ error: 'cardCode and ncf are required' });
+  }
+
+  let sessionId: string | null = null;
+  try {
+    sessionId = await sapB1Client.login();
+
+    // Check duplicate first
+    const exists = await sapB1Client.checkDuplicateNcf(invoice.ncf, sessionId);
+    if (exists) {
+      return res.json({
+        created: false,
+        duplicate: true,
+        message: `NCF ${invoice.ncf} already exists in SAP`,
+        companyDb: config.sapB1.companyDb,
+      });
+    }
+
+    const result = await sapB1Client.createPurchaseInvoice(invoice, sessionId);
+    return res.json({
+      created: true,
+      docEntry: result.DocEntry,
+      docNum: result.DocNum,
+      message: `Invoice posted — DocEntry: ${result.DocEntry}`,
+      companyDb: config.sapB1.companyDb,
+    });
+  } catch (error: any) {
+    console.error('[SAP PostInvoice] Error:', error.message);
+    const sapError = error.response?.data?.error?.message?.value || error.message;
+    return res.status(502).json({ error: sapError, companyDb: config.sapB1.companyDb });
+  } finally {
+    if (sessionId) {
+      try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
+    }
+  }
+});
+
 export default router;

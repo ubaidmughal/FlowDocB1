@@ -170,6 +170,93 @@ export class SapB1Client {
       throw err;
     }
   }
+
+  /**
+   * Checks if a Purchase Invoice with the given NCF already exists.
+   * Link: SAP U_NCF = FlowDoc NCF
+   */
+  async checkDuplicateNcf(ncf: string, sessionId: string): Promise<boolean> {
+    const encodedNcf = encodeURIComponent(ncf);
+    console.log(`[SAP] Checking duplicate NCF: ${ncf}`);
+    const data = await this.get(
+      `/PurchaseInvoices?$filter=U_NCF eq '${encodedNcf}'&$top=1`,
+      sessionId
+    );
+    const exists = data.value && data.value.length > 0;
+    console.log(`[SAP] Duplicate NCF ${ncf}: ${exists ? 'FOUND' : 'not found'}`);
+    return exists;
+  }
+
+  /**
+   * Creates a Purchase Invoice in SAP B1 from FlowDoc invoice data.
+   */
+  async createPurchaseInvoice(
+    invoice: {
+      cardCode: string;
+      ncf: string;
+      ncfType: string;
+      fechaEmision: string;
+      moneda: string;
+      tasaCambio: number | null;
+      subtotal: number;
+      descuento: number;
+      impuesto: number;
+      total: number;
+      observaciones: string | null;
+      glAccount: string | null;
+      costCenter: string | null;
+      lineItems: Array<{
+        descripcion: string;
+        cantidad: number;
+        precio: number;
+        itbisPct: number;
+      }>;
+    },
+    sessionId: string
+  ): Promise<{ DocEntry: number; DocNum: number }> {
+    const dateStr = invoice.fechaEmision ? new Date(invoice.fechaEmision).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+
+    const payload: any = {
+      CardCode: invoice.cardCode,
+      DocDate: dateStr,
+      TaxDate: dateStr,
+      DocDueDate: dateStr,
+      DocCurrency: invoice.moneda === 'USD' ? 'USD' : '##',
+      Comments: `NCF: ${invoice.ncf} | Processed by FlowDoc`,
+      U_NCF: invoice.ncf,
+      U_TipoNCF: invoice.ncfType,
+      DocumentLines: (invoice.lineItems || []).map((item, idx) => ({
+        LineNum: idx,
+        ItemDescription: item.descripcion?.substring(0, 200) || 'Invoice line',
+        Quantity: item.cantidad || 1,
+        UnitPrice: item.precio || 0,
+        AccountCode: invoice.glAccount || '_SYS00000000001',
+        CostingCode: invoice.costCenter || '',
+        TaxCode: item.itbisPct > 0 ? 'ITBIS' : 'EXENTO',
+      })),
+    };
+
+    // Exchange rate for foreign currency
+    if (invoice.moneda !== 'DOP' && invoice.tasaCambio) {
+      payload.DocRate = invoice.tasaCambio;
+    }
+
+    console.log(`[SAP] Creating Purchase Invoice — NCF: ${invoice.ncf}, CardCode: ${invoice.cardCode}`);
+    console.log(`[SAP] Payload:`, JSON.stringify(payload, null, 2));
+
+    try {
+      const data = await this.post('/PurchaseInvoices', payload, sessionId);
+      console.log(`[SAP] Purchase Invoice created — DocEntry: ${data.DocEntry}, DocNum: ${data.DocNum}`);
+      return { DocEntry: data.DocEntry, DocNum: data.DocNum };
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Purchase Invoice FAILED for NCF ${invoice.ncf}: ${sapErr}`);
+      if (err.response?.data) {
+        console.error(`[SAP] Full SAP response:`, JSON.stringify(err.response.data, null, 2));
+      }
+      throw err;
+    }
+  }
 }
 
 /** Shared singleton instance */

@@ -459,25 +459,131 @@ async function loadFileDetail(filename) {
     // Invoices tab
     document.getElementById('tab-invoices').innerHTML = `
       <table class="invoice-table" id="invoice-list-table">
-        <thead><tr><th>NCF</th><th>Type</th><th>Date</th><th>Vendor</th><th>RNC</th><th>Total</th></tr></thead>
+        <thead><tr><th>NCF</th><th>Type</th><th>Date</th><th>Vendor</th><th>RNC</th><th>Total</th><th style="width:100px;">SAP</th></tr></thead>
         <tbody>${(data.items || []).map(item => `
-          <tr data-invoice-id="${item.invoice_id}" title="Click for full detail from FlowDoc">
+          <tr data-invoice-id="${item.invoice_id}" data-vendor-rnc="${item.vendor_rnc}" data-card-code="${item.vendor_erp_card_code || ''}" data-ncf="${item.ncf}" title="Click for full detail">
             <td><strong>${item.ncf}</strong></td>
             <td><span class="status-badge green">${item.ncf_type}</span></td>
             <td>${new Date(item.fecha_emision).toLocaleDateString()}</td>
             <td>${item.vendor_nombre}</td>
             <td>${item.vendor_rnc}</td>
             <td><strong>${parseFloat(item.total).toLocaleString()}</strong> ${item.moneda}</td>
+            <td><button class="post-sap-btn" style="background:var(--accent3);color:#000;border:none;padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer;">Post SAP</button></td>
           </tr>
         `).join('')}</tbody>
       </table>
     `;
 
-    // Wire up click handlers on invoice rows to show detail
+    // Wire up row clicks for invoice detail (not on the SAP button)
     document.querySelectorAll('#invoice-list-table tbody tr').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.post-sap-btn')) return; // skip if clicked on button
         const invoiceId = row.dataset.invoiceId;
         if (invoiceId) showInvoiceDetail(invoiceId);
+      });
+    });
+
+    // Wire up "Post to SAP" buttons on invoices
+    document.querySelectorAll('.post-sap-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const row = (e.target as HTMLElement).closest('tr');
+        const invoiceId = row.dataset.invoiceId;
+        const vendorRnc = row.dataset.vendorRnc;
+        const ncf = row.dataset.ncf;
+        const button = e.target;
+        const originalText = button.textContent;
+
+        const showNotify = (msg, type) => {
+          const bar = document.getElementById('notify-bar');
+          bar.className = 'notify-bar ' + type;
+          bar.textContent = '';
+          const closeBtn = document.createElement('span');
+          closeBtn.className = 'close-notify';
+          closeBtn.textContent = '✕';
+          closeBtn.onclick = function() { bar.className = 'notify-bar'; };
+          bar.appendChild(closeBtn);
+          bar.appendChild(document.createTextNode(msg));
+          bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          setTimeout(() => { if (bar.className.includes(type)) bar.className = 'notify-bar'; }, 10000);
+        };
+
+        button.textContent = '⏳...';
+        button.disabled = true;
+
+        try {
+          // Step 1: Fetch invoice detail
+          const invRes = await fetch(`/api/ui/invoice-detail/${encodeURIComponent(invoiceId)}`);
+          const inv = await invRes.json();
+          if (!invRes.ok) throw new Error(inv.error || 'Failed to fetch invoice');
+
+          // Step 2: Check vendor in SAP, get CardCode
+          showNotify(`Checking vendor RNC ${vendorRnc} in SAP...`, 'success');
+          const vndRes = await fetch('/api/sap/check-vendor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rnc: vendorRnc }),
+          });
+          const vndData = await vndRes.json();
+          if (!vndRes.ok) throw new Error(vndData.error || 'Vendor check failed');
+
+          if (!vndData.found) {
+            showNotify(`Vendor not found in SAP. Use Vendors tab to add vendor RNC ${vendorRnc} first.`, 'error');
+            button.textContent = originalText;
+            button.disabled = false;
+            return;
+          }
+
+          const cardCode = vndData.vendor?.CardCode;
+          if (!cardCode) throw new Error('No CardCode returned');
+
+          // Step 3: Post invoice to SAP
+          button.textContent = '📤...';
+          showNotify(`Posting NCF ${ncf} to SAP ${vndData.companyDb}...`, 'success');
+
+          const postRes = await fetch('/api/sap/post-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cardCode,
+              ncf: inv.ncf,
+              ncfType: inv.ncf_type,
+              fechaEmision: inv.fecha_emision,
+              moneda: inv.moneda,
+              tasaCambio: inv.tasa_cambio,
+              subtotal: inv.subtotal,
+              descuento: inv.descuento,
+              impuesto: inv.impuesto,
+              total: inv.total,
+              observaciones: inv.observaciones,
+              glAccount: inv.gl_account,
+              costCenter: inv.cost_center,
+              lineItems: (inv.items || []).map(it => ({
+                descripcion: it.descripcion,
+                cantidad: parseFloat(it.cantidad) || 1,
+                precio: parseFloat(it.precio) || 0,
+                itbisPct: parseFloat(it.itbis_pct) || 0,
+              })),
+            }),
+          });
+          const postData = await postRes.json();
+
+          if (!postRes.ok) throw new Error(postData.error || 'Post failed');
+
+          if (postData.duplicate) {
+            showNotify(`NCF ${ncf} already exists in ${postData.companyDb}`, 'error');
+          } else if (postData.created) {
+            showNotify(`✅ Posted! DocEntry: ${postData.docEntry}, DocNum: ${postData.docNum} in ${postData.companyDb}`, 'success');
+            button.textContent = '✓ Posted';
+            button.style.background = 'var(--accent2)';
+            button.style.color = '#fff';
+            return;
+          }
+        } catch (err) {
+          showNotify(`Error: ${err.message}`, 'error');
+        }
+        button.textContent = originalText;
+        button.disabled = false;
       });
     });
 
