@@ -562,6 +562,7 @@ async function loadFileDetail(filename) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              invoiceId: inv.id,
               cardCode,
               ncf: inv.ncf,
               ncfType: inv.ncf_type,

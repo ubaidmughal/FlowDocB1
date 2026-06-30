@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { sapB1Client } from '../services/sapb1';
+import { flowDocClient } from '../services/flowdoc';
 import { config } from '../config';
 
 const router = Router();
@@ -136,11 +137,34 @@ router.post('/api/sap/post-invoice', async (req: Request, res: Response) => {
     }
 
     const result = await sapB1Client.createPurchaseInvoice(invoice, sessionId);
+
+    // Attach document if invoiceId is provided
+    let documentAttached = false;
+    if (invoice.invoiceId) {
+      try {
+        console.log(`[SAP] Downloading document for invoice ${invoice.invoiceId}...`);
+        const doc = await flowDocClient.getDocument(invoice.invoiceId);
+        const base64 = doc.data.toString('base64');
+        await sapB1Client.attachDocument(
+          result.DocEntry,
+          doc.filename,
+          base64,
+          doc.contentType,
+          sessionId
+        );
+        documentAttached = true;
+      } catch (docErr: any) {
+        console.error(`[SAP] Document attachment warning: ${docErr.message}`);
+        // Non-fatal — invoice was created
+      }
+    }
+
     return res.json({
       created: true,
       docEntry: result.DocEntry,
       docNum: result.DocNum,
-      message: `Invoice posted — DocEntry: ${result.DocEntry}`,
+      documentAttached,
+      message: `Invoice posted — DocEntry: ${result.DocEntry}${documentAttached ? ' (with attachment)' : ''}`,
       companyDb: config.sapB1.companyDb,
     });
   } catch (error: any) {

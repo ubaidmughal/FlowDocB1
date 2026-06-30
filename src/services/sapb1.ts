@@ -257,6 +257,54 @@ export class SapB1Client {
       throw err;
     }
   }
+
+  /**
+   * Attaches a document to a Purchase Invoice in SAP B1.
+   * The file content should be base64-encoded.
+   */
+  async attachDocument(
+    docEntry: number,
+    fileName: string,
+    fileContentBase64: string,
+    mimeType: string,
+    sessionId: string
+  ): Promise<void> {
+    const ext = fileName.split('.').pop() || 'pdf';
+    const today = new Date().toISOString().split('T')[0];
+
+    const payload = {
+      AttachmentEntry: null,
+      FileName: fileName,
+      SourceObjectType: '18',   // 18 = Purchase Invoice
+      SourceObjectKey: String(docEntry),
+      UserSignature: config.sapB1.username,
+      Attachments2_Lines: [
+        {
+          SourcePath: null,
+          FileName: fileName,
+          FileExtension: ext,
+          AttachmentDate: today,
+          Override: 'tNO',
+          FreeText: 'FlowDoc invoice document',
+          AttachmentContent: fileContentBase64,
+        },
+      ],
+    };
+
+    // Log payload size without the base64 content
+    const logPayload = { ...payload, Attachments2_Lines: [{ ...payload.Attachments2_Lines[0], AttachmentContent: `[${fileContentBase64.length} chars base64]` }] };
+    console.log(`[SAP] Attaching document to DocEntry ${docEntry}: ${fileName} (${mimeType})`);
+    console.log(`[SAP] Attachment payload:`, JSON.stringify(logPayload, null, 2));
+
+    try {
+      await this.post('/Attachments2', payload, sessionId);
+      console.log(`[SAP] Document attached successfully to DocEntry ${docEntry}`);
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Attachment FAILED for DocEntry ${docEntry}: ${sapErr}`);
+      // Don't throw — invoice was created successfully, attachment is non-critical
+    }
+  }
 }
 
 /** Shared singleton instance */
