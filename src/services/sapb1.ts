@@ -15,7 +15,7 @@ export interface BusinessPartner {
   CardName: string;
   CardType: string;
   FederalTaxID: string;
-  LicTradNum: string;
+  //LicTradNum: string;
   Currency: string;
 }
 
@@ -105,16 +105,16 @@ export class SapB1Client {
   }
 
   /**
-   * Finds a vendor (BusinessPartner) by RNC using LicTradNum.
-   * FlowDoc vendor RNC ↔ SAP OCRD.LicTradNum
+   * Finds a vendor (BusinessPartner) by RNC using FederalTaxID.
+   * SAP Service Layer FederalTaxID ↔ SAP DB OCRD.LicTradNum ↔ FlowDoc RNC
    * Returns the CardCode if found, null otherwise.
    */
   async findVendorByRnc(rnc: string, sessionId: string): Promise<BusinessPartner | null> {
     const cleanRnc = rnc.replace(/\D/g, '');
     const encodedRnc = encodeURIComponent(cleanRnc);
-    console.log(`[SAP] Searching vendor by LicTradNum: ${cleanRnc}`);
+    console.log(`[SAP] Searching vendor by FederalTaxID (OCRD.LicTradNum): ${cleanRnc}`);
     const data = await this.get(
-      `/BusinessPartners?$filter=LicTradNum eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
+      `/BusinessPartners?$filter=FederalTaxID eq '${encodedRnc}' and CardType eq 'cSupplier'&$top=1`,
       sessionId
     );
 
@@ -123,14 +123,14 @@ export class SapB1Client {
       console.log(`[SAP] Vendor found — CardCode: ${bp.CardCode}, Name: ${bp.CardName}`);
       return bp;
     }
-    console.log(`[SAP] Vendor not found by LicTradNum: ${cleanRnc}`);
+    console.log(`[SAP] Vendor not found by FederalTaxID: ${cleanRnc}`);
     return null;
   }
 
   /**
    * Creates a new vendor (BusinessPartner) in SAP B1.
-   * CardCode is auto-generated as "V{rnc}".
-   * FlowDoc RNC is stored in OCRD.AddID for linking.
+   * CardCode is auto-generated as V{rnc}.
+   * FederalTaxID (OCRD.LicTradNum) is set to the FlowDoc RNC for linking.
    */
   async createVendor(
     vendor: { rnc: string; nombre: string; email?: string; telefono?: string },
@@ -144,8 +144,7 @@ export class SapB1Client {
       CardCode: cardCode,
       CardName: vendor.nombre.substring(0, 100),
       CardType: 'cSupplier',
-      LicTradNum: cleanRnc,
-      FederalTaxID: cleanRnc,
+      FederalTaxID: cleanRnc,   // OCRD.LicTradNum
       Currency: '##', // all currencies
       EmailAddress: vendor.email || '',
       Phone1: vendor.telefono || '',
