@@ -527,14 +527,31 @@ async function loadFileDetail(filename) {
           const vndData = await vndRes.json();
           if (!vndRes.ok) throw new Error(vndData.error || 'Vendor check failed');
 
+          let cardCode;
+
           if (!vndData.found) {
-            showNotify(`Vendor not found in SAP. Use Vendors tab to add vendor RNC ${vendorRnc} first.`, 'error');
-            button.textContent = originalText;
-            button.disabled = false;
-            return;
+            // Auto-create vendor in SAP
+            showNotify(`Vendor not found — creating vendor RNC ${vendorRnc} in SAP...`, 'success');
+            button.textContent = '🏢...';
+
+            const createVndRes = await fetch('/api/sap/create-vendor', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                rnc: vendorRnc,
+                nombre: inv.proveedor || vendorRnc,
+                direccion: inv.direccion || '',
+              }),
+            });
+            const createVndData = await createVndRes.json();
+            if (!createVndRes.ok) throw new Error(createVndData.error || 'Vendor creation failed');
+
+            showNotify(`Vendor created: ${createVndData.cardCode} in ${createVndData.companyDb}`, 'success');
+            cardCode = createVndData.cardCode;
+          } else {
+            cardCode = vndData.vendor?.CardCode;
           }
 
-          const cardCode = vndData.vendor?.CardCode;
           if (!cardCode) throw new Error('No CardCode returned');
 
           // Step 3: Post invoice to SAP
