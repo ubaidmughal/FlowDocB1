@@ -274,7 +274,8 @@ export class SapB1Client {
 
   /**
    * Attaches a document to a Purchase Invoice in SAP B1.
-   * Posts file content as base64 directly in the Attachments2_Lines.
+   * Step 1: Create attachment entry (metadata only).
+   * Step 2: Upload raw file bytes via $value endpoint.
    */
   async attachDocument(
     docEntry: number,
@@ -285,8 +286,10 @@ export class SapB1Client {
   ): Promise<void> {
     const ext = fileName.split('.').pop() || 'pdf';
     const today = new Date().toISOString().split('T')[0];
+    const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    const payload = {
+    // Step 1: Create attachment entry (no file content — SAP doesn't accept AttachmentContent)
+    const metaPayload = {
       AttachmentEntry: null,
       FileName: fileName,
       SourceObjectType: '18',   // 18 = Purchase Invoice
@@ -300,23 +303,47 @@ export class SapB1Client {
           Override: 'tNO',
           FreeText: 'FlowDoc invoice document',
           SourcePath: '',
-          AttachmentContent: fileContentBase64,
         },
       ],
     };
 
-    console.log(`[SAP] Attaching doc to DocEntry ${docEntry}: ${fileName} (${(fileContentBase64.length / 1024).toFixed(1)} KB base64)`);
+    console.log(`[SAP] Step 1: Creating attachment entry for DocEntry ${docEntry}: ${fileName}`);
+    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
+    console.log(`[SAP] Attachment entry response:`, JSON.stringify(metaResult, null, 2));
 
+    const attachmentEntry = metaResult.AbsoluteEntry
+      || metaResult.Attachments2_Lines?.[0]?.AttachmentEntry
+      || metaResult.AttachmentEntry;
+
+    if (!attachmentEntry) {
+      console.error(`[SAP] No AttachmentEntry in response — attachment skipped`);
+      return;
+    }
+
+    // Step 2: Upload raw file bytes
+    console.log(`[SAP] Step 2: Uploading ${fileBuffer.length} bytes to AttachmentEntry ${attachmentEntry}`);
+    const client = this.createClient();
     try {
-      const result = await this.post('/Attachments2', payload, sessionId);
-      console.log(`[SAP] Attachment created — response:`, JSON.stringify(result, null, 2));
-    } catch (err: any) {
-      const sapErr = err.response?.data?.error?.message?.value || err.message;
-      console.error(`[SAP] Attachment FAILED: ${sapErr}`);
-      if (err.response?.data) {
-        console.error(`[SAP] Full SAP error:`, JSON.stringify(err.response.data, null, 2));
+      await client.post(
+        `/Attachments2(${attachmentEntry})/$value`,
+        fileBuffer,
+        {
+          headers: {
+            Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
+            'Content-Type': mimeType || 'application/octet-stream',
+            'Content-Length': String(fileBuffer.length),
+          },
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity,
+        }
+      );
+      console.log(`[SAP] File uploaded successfully — ${fileBuffer.length} bytes`);
+    } catch (uploadErr: any) {
+      const msg = uploadErr.response?.data?.error?.message?.value || uploadErr.message;
+      console.error(`[SAP] File upload failed: ${msg}`);
+      if (uploadErr.response?.data) {
+        console.error(`[SAP] Full error:`, JSON.stringify(uploadErr.response.data, null, 2));
       }
-      // Non-fatal — invoice was created
     }
   }
 }
