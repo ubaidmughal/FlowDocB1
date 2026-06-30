@@ -7,20 +7,25 @@ Flow Doc to SAP Business One Connector Middleware
 ```bash
 npm install
 cp .env.example .env   # then edit .env with real credentials
+npm run build
 npm run dev
 ```
 
-## Usage
+## Dashboard
 
-**Claim invoices from FlowDoc (test mode):**
-```bash
-curl -X POST http://localhost:3000/api/GetInvInQueue
-```
+Open `http://localhost:3000` for the web dashboard with:
+- **Dashboard** — summary stats (files, invoices, amounts, vendors)
+- **Saved Data** — browse claim JSON files with tabbed detail view
+- **API Tester** — one-click test of the claim + webhook round-trip
 
-This endpoint:
-1. Calls `POST /api/erp/sync/claim` on FlowDoc (10 items)
-2. Saves the response to `data/claim_{batchId}_{timestamp}.json`
-3. Reports all items back as `SAP_VENDOR_NOT_FOUND` (test/dry-run)
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/GetInvInQueue` | Claim 10 invoices, save to disk, report back (test mode) |
+| GET | `/api/ui/dashboard` | Summary stats for the dashboard |
+| GET | `/api/ui/saved-files` | List all saved claim files |
+| GET | `/api/ui/saved-files/:filename` | Get content of a saved file |
 
 ## Scripts
 

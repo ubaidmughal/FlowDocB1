@@ -94,6 +94,15 @@ export class FlowDocClient {
     );
     return response.data;
   }
+
+  /**
+   * Fetches full invoice detail from FlowDoc, including line items,
+   * documents, status history, and DGII validation.
+   */
+  async getInvoiceDetail(invoiceId: string): Promise<any> {
+    const response = await this.client.get(`/api/invoices/${invoiceId}`);
+    return response.data;
+  }
 }
 
 /** Shared singleton instance */
