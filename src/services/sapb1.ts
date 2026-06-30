@@ -288,31 +288,24 @@ export class SapB1Client {
     const today = new Date().toISOString().split('T')[0];
     const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment entry
+    // Step 1: Create attachment entry for SAP B1 10
     const metaPayload = {
-      SourceObjectType: 18,   // 18 = Purchase Invoice (number, not string)
-      SourceObjectKey: docEntry,
-      Attachments2_Lines: [
-        {
-          FileName: fileName,
-          FileExtension: ext,
-          AttachmentDate: today,
-          Override: 'tNO',
-          FreeText: 'FlowDoc invoice document',
-        },
-      ],
+      SourceObjectType: '18',
+      SourceObjectKey: String(docEntry),
+      UserSignature: config.sapB1.username,
+      Attachments2_Lines: [{
+        FileName: fileName,
+        FileExtension: ext,
+        AttachmentDate: today,
+        Override: 'tNO',
+        FreeText: 'FlowDoc invoice document',
+        SourcePath: '',
+      }],
     };
 
-    console.log(`[SAP] Step 1: Creating attachment entry for DocEntry ${docEntry}: ${fileName}`);
-    let metaResult: any;
-    try {
-      metaResult = await this.post('/Attachments2', metaPayload, sessionId);
-    } catch (metaErr: any) {
-      // Fallback: try without UserSignature, or try older Attachments endpoint
-      const msg = metaErr.response?.data?.error?.message?.value || metaErr.message;
-      console.error(`[SAP] Attachments2 failed: ${msg}, trying /Attachments...`);
-      metaResult = await this.post('/Attachments', metaPayload, sessionId);
-    }
+    console.log(`[SAP] Step 1: Creating attachment for DocEntry ${docEntry}: ${fileName}`);
+    console.log(`[SAP] Payload:`, JSON.stringify(metaPayload, null, 2));
+    const metaResult = await this.post('/Attachments2', metaPayload, sessionId);
     console.log(`[SAP] Attachment entry response:`, JSON.stringify(metaResult, null, 2));
 
     const attachmentEntry = metaResult.AbsoluteEntry
