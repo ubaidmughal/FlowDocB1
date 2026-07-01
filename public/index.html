@@ -104,6 +104,7 @@
   /* Tree view */
   .tree-node { margin-left: 0; }
   .tree-node .node-row { display: flex; align-items: center; padding: 3px 0; cursor: pointer; font-size: 13px; border-radius: 4px; }
+  .tree-node .node-row.leaf { cursor: default; }
   .tree-node .node-row:hover { background: var(--hover); }
   .tree-node .toggle { width: 20px; text-align: center; color: var(--muted); font-size: 10px; flex-shrink: 0; user-select: none; }
   .tree-node .toggle.expanded { color: var(--accent); }
@@ -845,8 +846,8 @@ function buildTree(accounts, parentCode) {
   return children.map(acc => {
     const hasKids = accounts.some(a => a.FatherAccountKey === acc.Code);
     return `<div class="tree-node">
-      <div class="node-row" data-code="${acc.Code}">
-        <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
+      <div class="node-row${hasKids ? '' : ' leaf'}" data-code="${acc.Code}">
+        <span class="toggle">${hasKids ? '▶' : ''}</span>
         <span class="code">${acc.Code}</span>
         <span class="name">${acc.Name || ''} <span style="color:var(--muted);font-size:11px;">${acc.FormatCode || ''}</span></span>
       </div>
