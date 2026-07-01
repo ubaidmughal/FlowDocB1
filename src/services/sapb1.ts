@@ -325,23 +325,18 @@ export class SapB1Client {
   async getChartOfAccounts(sessionId: string): Promise<any[]> {
     console.log(`[SAP] Fetching Chart of Accounts (paginated)...`);
     const allAccounts: any[] = [];
-    const pageSize = 500;
     let skip = 0;
-    let hasMore = true;
 
-    while (hasMore) {
+    while (true) {
       const data = await this.get(
-        `/ChartOfAccounts?$select=Code,Name,FatherAccountKey,FormatCode&$top=${pageSize}&$skip=${skip}&$orderby=Code`,
+        `/ChartOfAccounts?$select=Code,Name,FatherAccountKey,FormatCode&$top=500&$skip=${skip}&$orderby=Code`,
         sessionId
       );
       const batch = data.value || [];
+      if (batch.length === 0) break;
       allAccounts.push(...batch);
-      console.log(`[SAP] Fetched page: ${batch.length} accounts (skip=${skip}, total so far=${allAccounts.length})`);
-      if (batch.length < pageSize) {
-        hasMore = false;
-      } else {
-        skip += pageSize;
-      }
+      console.log(`[SAP] Fetched page: ${batch.length} accounts (skip=${skip}, total=${allAccounts.length})`);
+      skip += batch.length;
     }
 
     console.log(`[SAP] Total G/L accounts fetched: ${allAccounts.length}`);
