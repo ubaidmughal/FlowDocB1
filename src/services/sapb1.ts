@@ -326,7 +326,7 @@ export class SapB1Client {
     console.log(`[SAP] Fetching Chart of Accounts...`);
     try {
       const data = await this.get(
-        `/ChartOfAccounts?$select=Code,Name,Levels,FatherAccountKey`,
+        `/ChartOfAccounts?$select=Code,Name,FatherAccountKey`,
         sessionId
       );
       console.log(`[SAP] Fetched ${data.value?.length || 0} G/L accounts`);

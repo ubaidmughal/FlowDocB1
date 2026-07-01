@@ -828,8 +828,7 @@ function buildTree(accounts, parentCode) {
       <div class="node-row" data-code="${acc.Code}">
         <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
         <span class="code">${acc.Code}</span>
-        <span class="name">${acc.Name || acc.AcctCode || ''}</span>
-        <span class="level-badge">Lv${acc.Levels || '?'}</span>
+        <span class="name">${acc.Name || ''}</span>
       </div>
       <div class="tree-children">${hasKids ? buildTree(accounts, acc.Code) : ''}</div>
     </div>`;
@@ -847,7 +846,7 @@ async function loadGlAccounts() {
       tree.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No data. Use API Tester → Get SAP G/L to fetch.</p></div>';
       return;
     }
-    const roots = data.accounts.filter(a => a.Levels === 1 || a.Levels === '1');
+    const roots = data.accounts.filter(a => !a.FatherAccountKey);
     meta.textContent = `${data.count || data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
     tree.innerHTML = roots.length
       ? roots.map(r => {
@@ -856,8 +855,7 @@ async function loadGlAccounts() {
             <div class="node-row" data-code="${r.Code}">
               <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
               <span class="code">${r.Code}</span>
-              <span class="name">${r.Name || r.AcctCode || ''}</span>
-              <span class="level-badge">Lv${r.Levels || '?'}</span>
+              <span class="name">${r.Name || ''}</span>
             </div>
             <div class="tree-children">${hasKids ? buildTree(data.accounts, r.Code) : ''}</div>
           </div>`;
