@@ -324,12 +324,21 @@ export class SapB1Client {
    */
   async getChartOfAccounts(sessionId: string): Promise<any[]> {
     console.log(`[SAP] Fetching Chart of Accounts...`);
-    const data = await this.get(
-      `/ChartOfAccounts?$select=Code,Name,Levels,FatherAccountKey,AcctCode`,
-      sessionId
-    );
-    console.log(`[SAP] Fetched ${data.value?.length || 0} G/L accounts`);
-    return data.value || [];
+    try {
+      const data = await this.get(
+        `/ChartOfAccounts?$select=Code,Name,Levels,FatherAccountKey`,
+        sessionId
+      );
+      console.log(`[SAP] Fetched ${data.value?.length || 0} G/L accounts`);
+      return data.value || [];
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] ChartOfAccounts FAILED: ${sapErr}`);
+      if (err.response?.data) {
+        console.error(`[SAP] Full error:`, JSON.stringify(err.response.data, null, 2));
+      }
+      throw err;
+    }
   }
 }
 
