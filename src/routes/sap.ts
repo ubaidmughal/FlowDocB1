@@ -6,6 +6,7 @@ import { flowDocClient } from '../services/flowdoc';
 import { config } from '../config';
 
 const ATTACHMENTS_DIR = 'C:\\SAP\\attachments';
+const DATA_DIR = path.resolve(__dirname, '../../data');
 
 const router = Router();
 
@@ -188,6 +189,56 @@ router.post('/api/sap/post-invoice', async (req: Request, res: Response) => {
     if (sessionId) {
       try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
     }
+  }
+});
+
+/**
+ * POST /api/sap/fetch-gl-accounts
+ * Fetches Chart of Accounts from SAP and saves to a JSON file.
+ */
+router.post('/api/sap/fetch-gl-accounts', async (_req: Request, res: Response) => {
+  let sessionId: string | null = null;
+  try {
+    sessionId = await sapB1Client.login();
+    const accounts = await sapB1Client.getChartOfAccounts(sessionId);
+
+    // Save to data/gl_accounts.json (replaces existing)
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const filePath = path.join(DATA_DIR, 'gl_accounts.json');
+    fs.writeFileSync(filePath, JSON.stringify({ accounts, fetchedAt: new Date().toISOString(), companyDb: config.sapB1.companyDb }, null, 2));
+    console.log(`[SAP] GL accounts saved: ${filePath} (${accounts.length} accounts)`);
+
+    return res.json({
+      count: accounts.length,
+      file: 'gl_accounts.json',
+      companyDb: config.sapB1.companyDb,
+    });
+  } catch (error: any) {
+    console.error('[SAP FetchGL] Error:', error.message);
+    return res.status(502).json({ error: error.message, companyDb: config.sapB1.companyDb });
+  } finally {
+    if (sessionId) {
+      try { await sapB1Client.logout(sessionId); } catch { /* ignore */ }
+    }
+  }
+});
+
+/**
+ * GET /api/ui/gl-accounts
+ * Returns the saved Chart of Accounts data.
+ */
+router.get('/api/ui/gl-accounts', (_req: Request, res: Response) => {
+  const filePath = path.join(DATA_DIR, 'gl_accounts.json');
+  if (!fs.existsSync(filePath)) {
+    return res.json({ accounts: [], fetchedAt: null, count: 0 });
+  }
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return res.json(JSON.parse(raw));
+  } catch {
+    return res.json({ accounts: [], fetchedAt: null, count: 0 });
   }
 });
 

@@ -101,6 +101,19 @@
   .loading-spinner::after { content: ''; display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Tree view */
+  .tree-node { margin-left: 0; }
+  .tree-node .node-row { display: flex; align-items: center; padding: 3px 0; cursor: pointer; font-size: 13px; border-radius: 4px; }
+  .tree-node .node-row:hover { background: var(--hover); }
+  .tree-node .toggle { width: 20px; text-align: center; color: var(--muted); font-size: 10px; flex-shrink: 0; user-select: none; }
+  .tree-node .toggle.expanded { color: var(--accent); }
+  .tree-node .code { color: var(--accent); font-weight: 500; margin: 0 8px; min-width: 80px; }
+  .tree-node .name { flex: 1; }
+  .tree-node .level-badge { font-size: 10px; color: var(--muted); margin-left: 8px; }
+  .tree-children { display: none; margin-left: 20px; }
+  .tree-children.expanded { display: block; }
+  .gl-meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+
   /* JSON Viewer */
   .json-viewer { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto; line-height: 1.5; }
 
@@ -141,7 +154,10 @@
     <span class="nav-icon">📊</span> <span>Dashboard</span>
   </a>
   <a href="#" data-page="saved-data">
-    <span class="nav-icon">📁</span> <span>Saved Data</span>
+    <span class="nav-icon">📁</span> <span>Invoice(s) in Claims</span>
+  </a>
+  <a href="#" data-page="gl-accounts">
+    <span class="nav-icon">📋</span> <span>SAP G/L</span>
   </a>
   <a href="#" data-page="api-tester">
     <span class="nav-icon">🧪</span> <span>API Tester</span>
@@ -172,7 +188,7 @@
 
   <!-- SAVED DATA PAGE -->
   <section id="page-saved-data" class="page" style="display:none;">
-    <h1>Saved Data</h1>
+    <h1>Invoice(s) in Claims</h1>
     <p class="subtitle">Browse claim response files saved to disk</p>
     <div class="split-view">
       <div class="file-list-panel" id="file-list">
@@ -197,6 +213,14 @@
     </div>
   </section>
 
+  <!-- SAP G/L PAGE -->
+  <section id="page-gl-accounts" class="page" style="display:none;">
+    <h1>SAP G/L Accounts</h1>
+    <p class="subtitle">Chart of Accounts — tree view</p>
+    <div class="gl-meta" id="gl-meta"></div>
+    <div class="card" id="gl-tree"><div class="empty"><div class="icon">📋</div><p id="gl-empty-msg">No data. Use API Tester → Get SAP G/L to fetch.</p></div></div>
+  </section>
+
   <!-- API TESTER PAGE -->
   <section id="page-api-tester" class="page" style="display:none;">
     <h1>API Tester</h1>
@@ -207,6 +231,13 @@
         ▶ Claim &amp; Report (Test Mode)
       </button>
       <span id="test-status" style="margin-left:12px;font-size:13px;"></span>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="label" style="margin-bottom:12px;">FETCH SAP G/L Accounts</div>
+      <button id="btn-fetch-gl" style="background:var(--accent3);color:#000;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;">
+        📋 Get SAP G/L
+      </button>
+      <span id="gl-status" style="margin-left:12px;font-size:13px;"></span>
     </div>
     <div id="test-result" style="display:none;">
       <pre class="json-viewer" id="test-result-json"></pre>
@@ -227,6 +258,7 @@ document.querySelectorAll('nav a').forEach(link => {
     document.getElementById(`page-${page}`).style.display = 'block';
     if (page === 'dashboard') loadDashboard();
     if (page === 'saved-data') loadFileList();
+    if (page === 'gl-accounts') loadGlAccounts();
   });
 });
 
@@ -768,6 +800,86 @@ document.getElementById('btn-test-claim')?.addEventListener('click', async () =>
   }
   btn.disabled = false;
 });
+
+// ── Get SAP G/L ──
+document.getElementById('btn-fetch-gl')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-fetch-gl');
+  const status = document.getElementById('gl-status');
+  btn.disabled = true;
+  status.textContent = '⏳ Fetching from SAP...';
+  try {
+    const res = await fetch('/api/sap/fetch-gl-accounts', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Fetch failed');
+    status.textContent = `✅ ${data.count} accounts saved (${data.companyDb})`;
+  } catch (err) {
+    status.textContent = '❌ ' + err.message;
+  }
+  btn.disabled = false;
+});
+
+// ── SAP G/L Tree ──
+function buildTree(accounts, parentCode) {
+  const children = accounts.filter(a => a.FatherAccountKey === parentCode);
+  if (!children.length) return '';
+  return children.map(acc => {
+    const hasKids = accounts.some(a => a.FatherAccountKey === acc.Code);
+    return `<div class="tree-node">
+      <div class="node-row" data-code="${acc.Code}">
+        <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
+        <span class="code">${acc.Code}</span>
+        <span class="name">${acc.Name || acc.AcctCode || ''}</span>
+        <span class="level-badge">Lv${acc.Levels || '?'}</span>
+      </div>
+      <div class="tree-children">${hasKids ? buildTree(accounts, acc.Code) : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadGlAccounts() {
+  try {
+    const res = await fetch('/api/ui/gl-accounts');
+    const data = await res.json();
+    const meta = document.getElementById('gl-meta');
+    const tree = document.getElementById('gl-tree');
+    if (!data.accounts || !data.accounts.length) {
+      meta.textContent = '';
+      tree.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No data. Use API Tester → Get SAP G/L to fetch.</p></div>';
+      return;
+    }
+    const roots = data.accounts.filter(a => a.Levels === 1 || a.Levels === '1');
+    meta.textContent = `${data.count || data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+    tree.innerHTML = roots.length
+      ? roots.map(r => {
+          const hasKids = data.accounts.some(a => a.FatherAccountKey === r.Code);
+          return `<div class="tree-node">
+            <div class="node-row" data-code="${r.Code}">
+              <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
+              <span class="code">${r.Code}</span>
+              <span class="name">${r.Name || r.AcctCode || ''}</span>
+              <span class="level-badge">Lv${r.Levels || '?'}</span>
+            </div>
+            <div class="tree-children">${hasKids ? buildTree(data.accounts, r.Code) : ''}</div>
+          </div>`;
+        }).join('')
+      : '<div class="empty"><p>No root accounts found (Levels=1)</p></div>';
+
+    // Wire up toggle clicks
+    tree.querySelectorAll('.node-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const toggle = row.querySelector('.toggle');
+        const children = row.parentElement.querySelector('.tree-children');
+        if (children) {
+          const isExpanded = children.classList.toggle('expanded');
+          toggle.classList.toggle('expanded', isExpanded);
+          toggle.textContent = isExpanded ? '▼' : '▶';
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 // ── Init ──
 loadDashboard();

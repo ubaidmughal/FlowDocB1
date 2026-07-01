@@ -318,6 +318,19 @@ export class SapB1Client {
       return null;
     }
   }
+
+  /**
+   * Fetches the full Chart of Accounts from SAP.
+   */
+  async getChartOfAccounts(sessionId: string): Promise<any[]> {
+    console.log(`[SAP] Fetching Chart of Accounts...`);
+    const data = await this.get(
+      `/ChartOfAccounts?$select=Code,Name,Levels,FatherAccountKey,AcctCode`,
+      sessionId
+    );
+    console.log(`[SAP] Fetched ${data.value?.length || 0} G/L accounts`);
+    return data.value || [];
+  }
 }
 
 /** Shared singleton instance */
