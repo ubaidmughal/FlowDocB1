@@ -219,6 +219,7 @@ export class SapB1Client {
       observaciones: string | null;
       glAccount: string | null;
       costCenter: string | null;
+      attachmentEntry: number | null;
       lineItems: Array<{
         descripcion: string;
         cantidad: number;
@@ -236,7 +237,7 @@ export class SapB1Client {
       TaxDate: dateStr,
       DocDueDate: dateStr,
       DocType:'dDocument_Service',
-      DocCurrency: invoice.moneda || 'USD',
+      DocCurrency:  (invoice.moneda || '$').replace('USD', '$'),
       Comments: `NCF: ${invoice.ncf} | Processed by FlowDoc`,
       U_NCF: invoice.ncf,
       U_TipoNCF: invoice.ncfType,
@@ -253,6 +254,11 @@ export class SapB1Client {
     // Exchange rate for foreign currency
     if (invoice.moneda !== 'DOP' && invoice.tasaCambio) {
       payload.DocRate = invoice.tasaCambio;
+    }
+
+    // Attach document if attachment entry was created first
+    if (invoice.attachmentEntry) {
+      payload.AttachmentEntry = invoice.attachmentEntry;
     }
 
     console.log(`[SAP] Creating Purchase Invoice — NCF: ${invoice.ncf}, CardCode: ${invoice.cardCode}`);
@@ -273,77 +279,43 @@ export class SapB1Client {
   }
 
   /**
-   * Attaches a document to a Purchase Invoice in SAP B1.
-   * Step 1: Create attachment entry (metadata only).
-   * Step 2: Upload raw file bytes via $value endpoint.
+   * Creates an Attachment2 entry pointing to files in a local folder.
+   * Returns the AttachmentEntry to embed in the invoice payload.
    */
-  async attachDocument(
-    docEntry: number,
+  async createAttachment(
     fileName: string,
-    fileContentBase64: string,
-    mimeType: string,
+    sourceFolder: string,
     sessionId: string
-  ): Promise<void> {
+  ): Promise<number | null> {
     const ext = fileName.split('.').pop() || 'pdf';
     const today = new Date().toISOString().split('T')[0];
-    const fileBuffer = Buffer.from(fileContentBase64, 'base64');
 
-    // Step 1: Create attachment via OData navigation (SAP 10)
-    const metaPayload = {
+    const payload = {
       Attachments2_Lines: [{
-        FileName: fileName,
         FileExtension: ext,
-        AttachmentDate: today,
-        Override: 'tNO',
+        FileName: fileName.replace("." + ext, ""),
+        SourcePath: sourceFolder,
+       // UserID: config.sapB1.username,
         FreeText: 'FlowDoc invoice document',
-        SourcePath: '',
+        AttachmentDate: today,
+        Override: 'tYES',
       }],
     };
 
-    console.log(`[SAP] Step 1: Creating attachment for DocEntry ${docEntry}: ${fileName}`);
-    console.log(`[SAP] Payload:`, JSON.stringify(metaPayload, null, 2));
+    console.log(`[SAP] Creating attachment entry: ${fileName}`);
+    console.log(`[SAP] SourcePath: ${sourceFolder}`);
 
-    // SAP 10: attach via PurchaseInvoices navigation property
-    const metaResult = await this.post(
-      `/PurchaseInvoices(${docEntry})/Attachments2`,
-      metaPayload,
-      sessionId
-    );
-    console.log(`[SAP] Attachment entry response:`, JSON.stringify(metaResult, null, 2));
-
-    const attachmentEntry = metaResult.AbsoluteEntry
-      || metaResult.Attachments2_Lines?.[0]?.AttachmentEntry
-      || metaResult.AttachmentEntry;
-
-    if (!attachmentEntry) {
-      console.error(`[SAP] No AttachmentEntry in response — attachment skipped`);
-      return;
-    }
-
-    // Step 2: Upload raw file bytes via same navigation path
-    console.log(`[SAP] Step 2: Uploading ${fileBuffer.length} bytes to AttachmentEntry ${attachmentEntry}`);
-    const client = this.createClient();
     try {
-      await client.post(
-        `/PurchaseInvoices(${docEntry})/Attachments2(${attachmentEntry})/$value`,
-        fileBuffer,
-        {
-          headers: {
-            Cookie: `B1SESSION=${sessionId}; ROUTEID=.node0`,
-            'Content-Type': mimeType || 'application/octet-stream',
-            'Content-Length': String(fileBuffer.length),
-          },
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-        }
-      );
-      console.log(`[SAP] File uploaded successfully — ${fileBuffer.length} bytes`);
-    } catch (uploadErr: any) {
-      const msg = uploadErr.response?.data?.error?.message?.value || uploadErr.message;
-      console.error(`[SAP] File upload failed: ${msg}`);
-      if (uploadErr.response?.data) {
-        console.error(`[SAP] Full error:`, JSON.stringify(uploadErr.response.data, null, 2));
-      }
+      const result = await this.post('/Attachments2', payload, sessionId);
+      const entry = result.AbsoluteEntry
+        || result.AttachmentEntry
+        || result.Attachments2_Lines?.[0]?.AttachmentEntry;
+      console.log(`[SAP] Attachment created — AttachmentEntry: ${entry}`);
+      return entry || null;
+    } catch (err: any) {
+      const sapErr = err.response?.data?.error?.message?.value || err.message;
+      console.error(`[SAP] Attachment creation FAILED: ${sapErr}`);
+      return null;
     }
   }
 }

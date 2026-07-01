@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { sapB1Client } from '../services/sapb1';
 import { flowDocClient } from '../services/flowdoc';
 import { config } from '../config';
+
+const ATTACHMENTS_DIR = 'C:\\SAP\\attachments';
 
 const router = Router();
 
@@ -136,33 +140,37 @@ router.post('/api/sap/post-invoice', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await sapB1Client.createPurchaseInvoice(invoice, sessionId);
-
-    // Attach document if invoiceId is provided
+    // Step 1: Download documents and create attachment entry BEFORE posting invoice
+    let attachmentEntry: number | null = null;
     let documentAttached = false;
     if (invoice.invoiceId) {
       try {
         console.log(`[SAP] Downloading document for invoice ${invoice.invoiceId}...`);
         const doc = await flowDocClient.getDocument(invoice.invoiceId);
-        const base64 = doc.data.toString('base64');
-        await sapB1Client.attachDocument(
-          result.DocEntry,
-          doc.filename,
-          base64,
-          doc.contentType,
-          sessionId
-        );
-        documentAttached = true;
-      } catch (docErr: any) {
-        const status = docErr.response?.status;
-        const body = docErr.response?.data;
-        console.error(`[SAP] Document download FAILED (HTTP ${status || 'N/A'}): ${docErr.message}`);
-        if (body) {
-          console.error(`[SAP] FlowDoc response:`, typeof body === 'string' ? body.substring(0, 500) : JSON.stringify(body).substring(0, 500));
+
+        // Save to C:\SAP\attachments\
+        if (!fs.existsSync(ATTACHMENTS_DIR)) {
+          fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
         }
-        // Non-fatal — invoice was created
+        const cleanFileName = doc.filename.replace(/^.*[\\/]/, '');
+        const filePath = path.join(ATTACHMENTS_DIR, cleanFileName);
+        fs.writeFileSync(filePath, doc.data);
+        console.log(`[SAP] File saved: ${filePath} (${doc.data.length} bytes)`);
+
+        // Create attachment entry pointing to the saved file
+        attachmentEntry = await sapB1Client.createAttachment(cleanFileName, ATTACHMENTS_DIR, sessionId);
+        if (attachmentEntry) {
+          documentAttached = true;
+          console.log(`[SAP] Attachment entry ${attachmentEntry} will be embedded in invoice`);
+        }
+      } catch (docErr: any) {
+        console.error(`[SAP] Document download warning: ${docErr.message}`);
       }
     }
+
+    // Step 2: Create purchase invoice with attachment entry
+    invoice.attachmentEntry = attachmentEntry;
+    const result = await sapB1Client.createPurchaseInvoice(invoice, sessionId);
 
     return res.json({
       created: true,
