@@ -828,7 +828,7 @@ function buildTree(accounts, parentCode) {
       <div class="node-row" data-code="${acc.Code}">
         <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
         <span class="code">${acc.Code}</span>
-        <span class="name">${acc.Name || ''}</span>
+        <span class="name">${acc.Name || ''} <span style="color:var(--muted);font-size:11px;">${acc.FormatCode || ''}</span></span>
       </div>
       <div class="tree-children">${hasKids ? buildTree(accounts, acc.Code) : ''}</div>
     </div>`;
@@ -855,7 +855,7 @@ async function loadGlAccounts() {
             <div class="node-row" data-code="${r.Code}">
               <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
               <span class="code">${r.Code}</span>
-              <span class="name">${r.Name || ''}</span>
+              <span class="name">${r.Name || ''} <span style="color:var(--muted);font-size:11px;">${r.FormatCode || ''}</span></span>
             </div>
             <div class="tree-children">${hasKids ? buildTree(data.accounts, r.Code) : ''}</div>
           </div>`;

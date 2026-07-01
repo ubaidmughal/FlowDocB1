@@ -323,22 +323,29 @@ export class SapB1Client {
    * Fetches the full Chart of Accounts from SAP.
    */
   async getChartOfAccounts(sessionId: string): Promise<any[]> {
-    console.log(`[SAP] Fetching Chart of Accounts...`);
-    try {
+    console.log(`[SAP] Fetching Chart of Accounts (paginated)...`);
+    const allAccounts: any[] = [];
+    const pageSize = 500;
+    let skip = 0;
+    let hasMore = true;
+
+    while (hasMore) {
       const data = await this.get(
-        `/ChartOfAccounts?$select=Code,Name,FatherAccountKey`,
+        `/ChartOfAccounts?$select=Code,Name,FatherAccountKey,FormatCode&$top=${pageSize}&$skip=${skip}&$orderby=Code`,
         sessionId
       );
-      console.log(`[SAP] Fetched ${data.value?.length || 0} G/L accounts`);
-      return data.value || [];
-    } catch (err: any) {
-      const sapErr = err.response?.data?.error?.message?.value || err.message;
-      console.error(`[SAP] ChartOfAccounts FAILED: ${sapErr}`);
-      if (err.response?.data) {
-        console.error(`[SAP] Full error:`, JSON.stringify(err.response.data, null, 2));
+      const batch = data.value || [];
+      allAccounts.push(...batch);
+      console.log(`[SAP] Fetched page: ${batch.length} accounts (skip=${skip}, total so far=${allAccounts.length})`);
+      if (batch.length < pageSize) {
+        hasMore = false;
+      } else {
+        skip += pageSize;
       }
-      throw err;
     }
+
+    console.log(`[SAP] Total G/L accounts fetched: ${allAccounts.length}`);
+    return allAccounts;
   }
 }
 
