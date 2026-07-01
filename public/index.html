@@ -114,6 +114,17 @@
   .tree-children.expanded { display: block; }
   .gl-meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
 
+  /* Root account boxes */
+  .root-account {
+    padding: 10px 14px; margin-bottom: 6px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); transition: all 0.15s; font-size: 13px;
+  }
+  .root-account:hover { border-color: var(--accent); background: var(--hover); }
+  .root-account.active { border-color: var(--accent); background: var(--hover); }
+  .root-account .code { color: var(--accent); font-weight: 600; font-size: 12px; }
+  .root-account .name { margin-top: 2px; }
+  .root-account .format { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
   /* JSON Viewer */
   .json-viewer { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto; line-height: 1.5; }
 
@@ -216,9 +227,18 @@
   <!-- SAP G/L PAGE -->
   <section id="page-gl-accounts" class="page" style="display:none;">
     <h1>SAP G/L Accounts</h1>
-    <p class="subtitle">Chart of Accounts — tree view</p>
+    <p class="subtitle">Chart of Accounts — select a root account</p>
     <div class="gl-meta" id="gl-meta"></div>
-    <div class="card" id="gl-tree"><div class="empty"><div class="icon">📋</div><p id="gl-empty-msg">No data. Use API Tester → Get SAP G/L to fetch.</p></div></div>
+    <div class="split-view" style="height:calc(100vh - 200px);">
+      <div class="file-list-panel" id="gl-root-panel" style="width:280px;">
+        <h3>Root Accounts</h3>
+        <div id="gl-root-list"></div>
+      </div>
+      <div class="detail-panel" id="gl-tree-panel">
+        <div class="empty"><div class="icon">👈</div><p>Select a root account to see its tree</p></div>
+        <div class="tab-content active" id="gl-tree-content" style="padding:20px; overflow-y:auto;"></div>
+      </div>
+    </div>
   </section>
 
   <!-- API TESTER PAGE -->
@@ -840,40 +860,71 @@ async function loadGlAccounts() {
     const res = await fetch('/api/ui/gl-accounts');
     const data = await res.json();
     const meta = document.getElementById('gl-meta');
-    const tree = document.getElementById('gl-tree');
+    const rootList = document.getElementById('gl-root-list');
+    const treeContent = document.getElementById('gl-tree-content');
+    const treePanel = document.getElementById('gl-tree-panel');
+
     if (!data.accounts || !data.accounts.length) {
       meta.textContent = '';
-      tree.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No data. Use API Tester → Get SAP G/L to fetch.</p></div>';
+      rootList.innerHTML = '<div class="empty"><p style="font-size:13px;">No data. Use API Tester → Get SAP G/L to fetch.</p></div>';
+      treeContent.innerHTML = '';
+      treePanel.querySelector('.empty').style.display = 'block';
       return;
     }
-    const roots = data.accounts.filter(a => !a.FatherAccountKey);
-    meta.textContent = `${data.count || data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
-    tree.innerHTML = roots.length
-      ? roots.map(r => {
-          const hasKids = data.accounts.some(a => a.FatherAccountKey === r.Code);
-          return `<div class="tree-node">
-            <div class="node-row" data-code="${r.Code}">
-              <span class="toggle">${hasKids ? '▶' : '&nbsp;'}</span>
-              <span class="code">${r.Code}</span>
-              <span class="name">${r.Name || ''} <span style="color:var(--muted);font-size:11px;">${r.FormatCode || ''}</span></span>
-            </div>
-            <div class="tree-children">${hasKids ? buildTree(data.accounts, r.Code) : ''}</div>
-          </div>`;
-        }).join('')
-      : '<div class="empty"><p>No root accounts found (Levels=1)</p></div>';
 
-    // Wire up toggle clicks
-    tree.querySelectorAll('.node-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const toggle = row.querySelector('.toggle');
-        const children = row.parentElement.querySelector('.tree-children');
-        if (children) {
-          const isExpanded = children.classList.toggle('expanded');
-          toggle.classList.toggle('expanded', isExpanded);
-          toggle.textContent = isExpanded ? '▼' : '▶';
-        }
+    // Store accounts globally for tree building
+    window._glAccounts = data.accounts;
+    const roots = data.accounts.filter(a => !a.FatherAccountKey);
+
+    meta.textContent = `${data.count || data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+
+    // Render root account boxes
+    rootList.innerHTML = roots.length
+      ? roots.map(r => `
+        <div class="root-account" data-code="${r.Code}">
+          <div class="code">${r.Code}</div>
+          <div class="name">${r.Name || ''}</div>
+          ${r.FormatCode ? `<div class="format">${r.FormatCode}</div>` : ''}
+        </div>
+      `).join('')
+      : '<div class="empty"><p>No root accounts found</p></div>';
+
+    // Wire up clicks on root boxes
+    rootList.querySelectorAll('.root-account').forEach(box => {
+      box.addEventListener('click', () => {
+        rootList.querySelectorAll('.root-account').forEach(b => b.classList.remove('active'));
+        box.classList.add('active');
+        treePanel.querySelector('.empty').style.display = 'none';
+        treeContent.style.display = 'block';
+        const code = box.dataset.code;
+        const root = data.accounts.find(a => a.Code === code);
+        const hasKids = data.accounts.some(a => a.FatherAccountKey === code);
+        treeContent.innerHTML = `
+          <h3 style="margin-bottom:12px;font-size:15px;">
+            <span style="color:var(--accent);">${root?.Code || code}</span>
+            ${root?.Name ? ' — ' + root.Name : ''}
+          </h3>
+          ${hasKids ? buildTree(data.accounts, code) : '<p style="color:var(--muted);">No sub-accounts</p>'}
+        `;
+        // Wire up toggles
+        treeContent.querySelectorAll('.node-row').forEach(row => {
+          row.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const toggle = row.querySelector('.toggle');
+            const children = row.parentElement.querySelector('.tree-children');
+            if (children) {
+              const expanded = children.classList.toggle('expanded');
+              toggle.classList.toggle('expanded', expanded);
+              toggle.textContent = expanded ? '▼' : '▶';
+            }
+          });
+        });
       });
     });
+
+    // Reset right panel
+    treeContent.style.display = 'none';
+    treePanel.querySelector('.empty').style.display = 'block';
   } catch (err) {
     console.error(err);
   }
