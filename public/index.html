@@ -303,7 +303,7 @@
 </main>
 
 <!-- API Log Panel -->
-<button class="log-toggle-btn" id="log-toggle" onclick="toggleLog()" style="display:none;">📋 Log</button>
+<button class="log-toggle-btn" id="log-toggle" onclick="toggleLog()">📋 Log</button>
 <div class="log-panel" id="log-panel">
   <div class="log-header">
     <span>📋 API Log</span>
@@ -1098,8 +1098,8 @@ loadDashboard();
 function toggleLog() {
   const panel = document.getElementById('log-panel');
   const btn = document.getElementById('log-toggle');
-  panel.classList.toggle('open');
-  btn.style.display = panel.classList.contains('open') ? 'none' : 'block';
+  const open = panel.classList.toggle('open');
+  btn.textContent = open ? '✕' : '📋 Log';
 }
 
 function addLog(method, url, status, body) {
