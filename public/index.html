@@ -972,50 +972,39 @@ function applyGlFilter() {
   const filter = document.querySelector('input[name="gl-filter"]:checked')?.value || 'all';
   const container = document.getElementById('gl-tree-content');
   const rootPanel = document.getElementById('gl-root-list');
-  const sel = window._glSelectedCodes || [];
+  const sel = new Set(window._glSelectedCodes || []);
+  const accounts = window._glAccounts || [];
 
-  if (filter === 'all') {
-    // Show everything
+  if (filter === 'all' || !sel.size) {
     if (container) container.querySelectorAll('.tree-node').forEach(n => n.style.display = '');
     if (rootPanel) rootPanel.querySelectorAll('.root-account').forEach(n => n.style.display = '');
     return;
   }
 
-  // Selected Only — hide nodes without selected descendants
-  function nodeHasSelected(node) {
-    const cb = node.querySelector('.gl-check');
-    if (cb && cb.checked) return true;
-    const childContainer = node.querySelector('.tree-children');
-    if (!childContainer) return false;
-    for (const child of childContainer.children) {
-      if (child.classList.contains('tree-node') && nodeHasSelected(child)) return true;
+  // Build a set of codes that should be visible: selected + all ancestors
+  const visible = new Set(sel);
+  for (const code of sel) {
+    let current = accounts.find(a => a.Code === code);
+    while (current && current.FatherAccountKey) {
+      visible.add(current.FatherAccountKey);
+      current = accounts.find(a => a.Code === current.FatherAccountKey);
     }
-    return false;
   }
 
+  // Filter tree nodes by data-code attribute
   if (container) {
     container.querySelectorAll('.tree-node').forEach(node => {
-      node.style.display = nodeHasSelected(node) ? '' : 'none';
+      const row = node.querySelector('.node-row');
+      const code = row?.dataset?.code;
+      node.style.display = (code && visible.has(code)) ? '' : 'none';
     });
   }
 
-  // Filter root boxes — show only roots that have selected descendants
+  // Filter root boxes
   if (rootPanel) {
     rootPanel.querySelectorAll('.root-account').forEach(box => {
       const code = box.dataset.code;
-      // A root is relevant if any selected account belongs to this root's tree
-      const accounts = window._glAccounts || [];
-      const hasSelected = accounts.some(a => {
-        if (!sel.includes(a.Code)) return false;
-        // Walk up from the account to see if it's under this root
-        let current = a;
-        while (current) {
-          if (current.FatherAccountKey === code) return true;
-          current = accounts.find(p => p.Code === current.FatherAccountKey);
-        }
-        return false;
-      }) || (sel.includes(code) && accounts.some(a => a.Code === code && !a.FatherAccountKey));
-      box.style.display = hasSelected ? '' : 'none';
+      box.style.display = (code && visible.has(code)) ? '' : 'none';
     });
   }
 }
