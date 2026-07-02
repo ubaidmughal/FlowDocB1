@@ -129,6 +129,27 @@
   /* JSON Viewer */
   .json-viewer { font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 16px; border-radius: 8px; overflow-x: auto; line-height: 1.5; }
 
+  /* API Log Panel */
+  .log-panel { position: fixed; top: 0; right: 0; width: 420px; height: 100vh; background: var(--sidebar); border-left: 1px solid var(--border); z-index: 20; transform: translateX(100%); transition: transform 0.2s; display: flex; flex-direction: column; }
+  .log-panel.open { transform: translateX(0); }
+  .log-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+  .log-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+  .log-close:hover { color: var(--text); }
+  .log-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .log-entry { margin-bottom: 10px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .log-entry-header { padding: 6px 10px; background: var(--card); display: flex; justify-content: space-between; align-items: center; }
+  .log-method { font-weight: 600; font-size: 11px; padding: 2px 6px; border-radius: 3px; }
+  .log-method.get { background: rgba(34,197,94,0.15); color: var(--accent2); }
+  .log-method.post { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .log-url { color: var(--muted); margin-left: 6px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-status { font-size: 11px; font-weight: 600; }
+  .log-status.ok { color: var(--accent2); }
+  .log-status.err { color: var(--accent4); }
+  .log-body { padding: 8px 10px; background: var(--bg); max-height: 200px; overflow-y: auto; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  .log-clear { padding: 4px 10px; font-size: 11px; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; cursor: pointer; }
+  .log-clear:hover { color: var(--text); border-color: var(--accent4); }
+  .log-toggle-btn { position: fixed; top: 12px; right: 12px; z-index: 21; background: var(--accent); color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+
   /* Empty State */
   .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty .icon { font-size: 48px; margin-bottom: 12px; }
@@ -280,6 +301,21 @@
   </section>
 
 </main>
+
+<!-- API Log Panel -->
+<button class="log-toggle-btn" id="log-toggle" onclick="toggleLog()" style="display:none;">📋 Log</button>
+<div class="log-panel" id="log-panel">
+  <div class="log-header">
+    <span>📋 API Log</span>
+    <div style="display:flex;gap:8px;">
+      <button class="log-clear" onclick="clearLog()">Clear</button>
+      <button class="log-close" onclick="toggleLog()">✕</button>
+    </div>
+  </div>
+  <div class="log-list" id="log-list">
+    <div class="empty" style="padding:20px;"><p>No API calls yet</p></div>
+  </div>
+</div>
 
 <script>
 // ── Navigation ──
@@ -1036,6 +1072,58 @@ function applyGlFilter() {
 
 // ── Init ──
 loadDashboard();
+
+// ── API Log ──
+(function() {
+  const realFetch = window.fetch;
+  window.fetch = async function(url, opts = {}) {
+    const method = (opts.method || 'GET').toUpperCase();
+    const start = Date.now();
+    let res, data;
+    try {
+      res = await realFetch(url, opts);
+      const ct = res.headers.get('content-type') || '';
+      data = ct.includes('json') ? await res.clone().json() : await res.clone().text();
+    } catch (err) {
+      data = { error: err.message };
+    }
+    // Only log our own API calls
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+      addLog(method, url, res ? res.status : 0, data);
+    }
+    return res;
+  };
+})();
+
+function toggleLog() {
+  const panel = document.getElementById('log-panel');
+  const btn = document.getElementById('log-toggle');
+  panel.classList.toggle('open');
+  btn.style.display = panel.classList.contains('open') ? 'none' : 'block';
+}
+
+function addLog(method, url, status, body) {
+  const list = document.getElementById('log-list');
+  if (list.querySelector('.empty')) list.innerHTML = '';
+  const time = new Date().toLocaleTimeString();
+  const ok = status >= 200 && status < 300;
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `
+    <div class="log-entry-header">
+      <span class="log-method ${method.toLowerCase()}">${method}</span>
+      <span class="log-url" title="${url}">${url}</span>
+      <span class="log-status ${ok ? 'ok' : 'err'}">${status || 'ERR'}</span>
+      <span style="font-size:10px;color:var(--muted);margin-left:6px;">${time}</span>
+    </div>
+    <div class="log-body">${typeof body === 'string' ? body : JSON.stringify(body, null, 2)}</div>
+  `;
+  list.insertBefore(entry, list.firstChild);
+}
+
+function clearLog() {
+  document.getElementById('log-list').innerHTML = '<div class="empty" style="padding:20px;"><p>No API calls yet</p></div>';
+}
 </script>
 </body>
 </html>
