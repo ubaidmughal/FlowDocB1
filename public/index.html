@@ -970,15 +970,28 @@ function updateSelectionCount() {
 
 function applyGlFilter() {
   const filter = document.querySelector('input[name="gl-filter"]:checked')?.value || 'all';
-  document.querySelectorAll('.tree-node .node-row').forEach(row => {
-    const code = row.dataset.code;
-    const node = row.parentElement;
-    if (filter === 'selected') {
-      const checked = row.querySelector('.gl-check')?.checked;
-      node.style.display = checked ? '' : 'none';
-    } else {
-      node.style.display = '';
+  const container = document.getElementById('gl-tree-content');
+  if (!container) return;
+
+  if (filter === 'all') {
+    // Show everything
+    container.querySelectorAll('.tree-node').forEach(n => n.style.display = '');
+    return;
+  }
+
+  // Selected Only — walk tree nodes bottom-up
+  function hasSelectedDescendant(node) {
+    const cb = node.querySelector('.gl-check');
+    if (cb && cb.checked) return true;
+    const children = node.querySelectorAll(':scope > .tree-children > .tree-node');
+    for (const child of children) {
+      if (hasSelectedDescendant(child)) return true;
     }
+    return false;
+  }
+
+  container.querySelectorAll('.tree-node').forEach(node => {
+    node.style.display = hasSelectedDescendant(node) ? '' : 'none';
   });
 }
 
