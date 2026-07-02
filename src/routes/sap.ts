@@ -300,4 +300,71 @@ router.post('/api/sap/push-gl-selections', async (_req: Request, res: Response) 
   }
 });
 
+// ═══════════ Profit Centers ═══════════
+
+const PC_DIR = path.resolve(__dirname, '../../data/pc');
+
+/**
+ * POST /api/sap/fetch-profit-centers
+ */
+router.post('/api/sap/fetch-profit-centers', async (_req: Request, res: Response) => {
+  let sessionId: string | null = null;
+  try {
+    sessionId = await sapB1Client.login();
+    const centers = await sapB1Client.getProfitCenters(sessionId);
+    if (!fs.existsSync(PC_DIR)) fs.mkdirSync(PC_DIR, { recursive: true });
+    fs.writeFileSync(path.join(PC_DIR, 'profit_centers.json'), JSON.stringify({ centers, fetchedAt: new Date().toISOString(), companyDb: config.sapB1.companyDb }, null, 2));
+    return res.json({ count: centers.length, companyDb: config.sapB1.companyDb });
+  } catch (error: any) {
+    console.error('[SAP FetchPC] Error:', error.message);
+    return res.status(502).json({ error: error.message });
+  } finally {
+    if (sessionId) { try { await sapB1Client.logout(sessionId); } catch {} }
+  }
+});
+
+/**
+ * GET /api/ui/profit-centers
+ */
+router.get('/api/ui/profit-centers', (_req: Request, res: Response) => {
+  const fp = path.join(PC_DIR, 'profit_centers.json');
+  const sp = path.join(PC_DIR, 'pc_selections.json');
+  if (!fs.existsSync(fp)) return res.json({ centers: [], selectedCodes: [], count: 0 });
+  try {
+    const data = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const sel = fs.existsSync(sp) ? JSON.parse(fs.readFileSync(sp, 'utf-8')) : [];
+    return res.json({ ...data, selectedCodes: sel, count: data.centers?.length || 0 });
+  } catch { return res.json({ centers: [], selectedCodes: [], count: 0 }); }
+});
+
+/**
+ * POST /api/ui/pc-selections
+ */
+router.post('/api/ui/pc-selections', (req: Request, res: Response) => {
+  try {
+    const { selectedCodes } = req.body;
+    if (!Array.isArray(selectedCodes)) return res.status(400).json({ error: 'invalid' });
+    if (!fs.existsSync(PC_DIR)) fs.mkdirSync(PC_DIR, { recursive: true });
+    fs.writeFileSync(path.join(PC_DIR, 'pc_selections.json'), JSON.stringify(selectedCodes, null, 2));
+    return res.json({ saved: true, count: selectedCodes.length });
+  } catch (error: any) { return res.status(500).json({ error: error.message }); }
+});
+
+/**
+ * POST /api/sap/push-pc-selections
+ */
+router.post('/api/sap/push-pc-selections', async (_req: Request, res: Response) => {
+  try {
+    const sp = path.join(PC_DIR, 'pc_selections.json');
+    const fp = path.join(PC_DIR, 'profit_centers.json');
+    if (!fs.existsSync(sp) || !fs.existsSync(fp)) return res.status(400).json({ error: 'No data. Fetch profit centers first.' });
+    const codes: string[] = JSON.parse(fs.readFileSync(sp, 'utf-8'));
+    if (!codes.length) return res.status(400).json({ error: 'No centers selected.' });
+    const { centers } = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const items = codes.map(c => { const cc = centers.find((x: any) => x.CenterCode === c); return cc ? { code: cc.CenterCode, name: cc.CenterName } : null; }).filter(Boolean) as Array<{ code: string; name: string }>;
+    const result = await flowDocClient.pushMasterData('cost_centers', items);
+    return res.json({ pushed: items.length, message: result.message || `${items.length} centers pushed` });
+  } catch (error: any) { return res.status(502).json({ error: error.message }); }
+});
+
 export default router;

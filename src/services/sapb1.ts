@@ -342,6 +342,19 @@ export class SapB1Client {
     console.log(`[SAP] Total G/L accounts fetched: ${allAccounts.length}`);
     return allAccounts;
   }
+
+  /**
+   * Fetches all Profit Centers from SAP.
+   */
+  async getProfitCenters(sessionId: string): Promise<any[]> {
+    console.log(`[SAP] Fetching Profit Centers...`);
+    const data = await this.get(
+      `/ProfitCenters?$select=CenterCode,CenterName,GroupCode&$top=500&$orderby=CenterCode`,
+      sessionId
+    );
+    console.log(`[SAP] Fetched ${data.value?.length || 0} profit centers`);
+    return data.value || [];
+  }
 }
 
 /** Shared singleton instance */

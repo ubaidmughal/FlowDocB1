@@ -192,6 +192,9 @@
   <a href="#" data-page="gl-accounts">
     <span class="nav-icon">📋</span> <span>SAP G/L</span>
   </a>
+  <a href="#" data-page="profit-centers">
+    <span class="nav-icon">🏢</span> <span>Profit Centers</span>
+  </a>
   <a href="#" data-page="api-tester">
     <span class="nav-icon">🧪</span> <span>API Tester</span>
   </a>
@@ -273,6 +276,26 @@
     </div>
   </section>
 
+  <!-- PROFIT CENTERS PAGE -->
+  <section id="page-profit-centers" class="page" style="display:none;">
+    <h1>Profit Centers</h1>
+    <p class="subtitle">Select centers for FlowDoc sync</p>
+    <div class="gl-meta" id="pc-meta"></div>
+    <div style="margin-bottom:12px;display:flex;gap:16px;align-items:center;">
+      <span style="font-size:13px;color:var(--muted);">Show:</span>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="pc-filter" value="all" checked onchange="applyPcFilter()"> All
+      </label>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="pc-filter" value="selected" onchange="applyPcFilter()"> Selected Only
+      </label>
+      <span style="font-size:12px;color:var(--muted);" id="pc-selected-count"></span>
+    </div>
+    <div class="card" id="pc-list" style="max-height:calc(100vh - 240px);overflow-y:auto;">
+      <div class="empty"><div class="icon">🏢</div><p>No data. Use API Tester → Get SAP PC to fetch.</p></div>
+    </div>
+  </section>
+
   <!-- API TESTER PAGE -->
   <section id="page-api-tester" class="page" style="display:none;">
     <h1>API Tester</h1>
@@ -294,6 +317,17 @@
         📤 Push Selected to FlowDoc
       </button>
       <span id="push-gl-status" style="margin-left:12px;font-size:13px;"></span>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="label" style="margin-bottom:12px;">FETCH SAP Profit Centers</div>
+      <button id="btn-fetch-pc" style="background:var(--accent3);color:#000;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;">
+        📊 Get SAP PC
+      </button>
+      <span id="pc-status" style="margin-left:12px;font-size:13px;"></span>
+      <button id="btn-push-pc" style="background:var(--accent2);color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-left:12px;">
+        📤 Push Selected PC
+      </button>
+      <span id="push-pc-status" style="margin-left:12px;font-size:13px;"></span>
     </div>
     <div id="test-result" style="display:none;">
       <pre class="json-viewer" id="test-result-json"></pre>
@@ -330,6 +364,7 @@ document.querySelectorAll('nav a').forEach(link => {
     if (page === 'dashboard') loadDashboard();
     if (page === 'saved-data') loadFileList();
     if (page === 'gl-accounts') loadGlAccounts();
+    if (page === 'profit-centers') loadProfitCenters();
   });
 });
 
@@ -1068,6 +1103,101 @@ function applyGlFilter() {
       box.style.display = (code && visible.has(code)) ? '' : 'none';
     });
   }
+}
+
+// ── Profit Centers ──
+document.getElementById('btn-fetch-pc')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-fetch-pc');
+  const status = document.getElementById('pc-status');
+  btn.disabled = true; status.textContent = '⏳ Fetching...';
+  try {
+    const res = await fetch('/api/sap/fetch-profit-centers', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = `✅ ${data.count} centers saved (${data.companyDb})`;
+  } catch (err) { status.textContent = '❌ ' + err.message; }
+  btn.disabled = false;
+});
+
+document.getElementById('btn-push-pc')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-push-pc');
+  const status = document.getElementById('push-pc-status');
+  btn.disabled = true; status.textContent = '⏳ Pushing...';
+  try {
+    const res = await fetch('/api/sap/push-pc-selections', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = `✅ ${data.pushed} centers pushed to FlowDoc`;
+  } catch (err) { status.textContent = '❌ ' + err.message; }
+  btn.disabled = false;
+});
+
+async function loadProfitCenters() {
+  try {
+    const res = await fetch('/api/ui/profit-centers');
+    const data = await res.json();
+    const meta = document.getElementById('pc-meta');
+    const list = document.getElementById('pc-list');
+    if (!data.centers?.length) {
+      meta.textContent = '';
+      list.innerHTML = '<div class="empty"><div class="icon">🏢</div><p>No data. Use API Tester → Get SAP PC to fetch.</p></div>';
+      return;
+    }
+    window._pcData = data.centers;
+    window._pcSelected = data.selectedCodes || [];
+    meta.textContent = `${data.centers.length} centers · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+    updatePcCount();
+    renderPcList();
+  } catch (err) { console.error(err); }
+}
+
+function renderPcList() {
+  const list = document.getElementById('pc-list');
+  const centers = window._pcData || [];
+  const sel = window._pcSelected || [];
+  list.innerHTML = `
+    <table class="invoice-table" style="font-size:13px;">
+      <thead><tr><th style="width:30px;"></th><th>Code</th><th>Name</th><th>Group</th></tr></thead>
+      <tbody>${centers.map(c => `
+        <tr>
+          <td><input type="checkbox" class="pc-check" data-code="${c.CenterCode}" ${sel.includes(c.CenterCode) ? 'checked' : ''} style="accent-color:var(--accent);"></td>
+          <td><strong style="color:var(--accent);">${c.CenterCode}</strong></td>
+          <td>${c.CenterName || ''}</td>
+          <td style="color:var(--muted);">${c.GroupCode || ''}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+  list.querySelectorAll('.pc-check').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const code = cb.dataset.code;
+      const arr = window._pcSelected || [];
+      if (cb.checked) { if (!arr.includes(code)) arr.push(code); }
+      else { window._pcSelected = arr.filter(c => c !== code); }
+      updatePcCount();
+      try {
+        await fetch('/api/ui/pc-selections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selectedCodes: window._pcSelected }) });
+      } catch {}
+    });
+  });
+  applyPcFilter();
+}
+
+function updatePcCount() {
+  const el = document.getElementById('pc-selected-count');
+  if (el) el.textContent = `(${window._pcSelected?.length || 0} selected)`;
+}
+
+function applyPcFilter() {
+  const filter = document.querySelector('input[name="pc-filter"]:checked')?.value || 'all';
+  document.querySelectorAll('#pc-list tbody tr').forEach(row => {
+    const cb = row.querySelector('.pc-check');
+    if (filter === 'selected') {
+      row.style.display = cb?.checked ? '' : 'none';
+    } else {
+      row.style.display = '';
+    }
+  });
 }
 
 // ── Init ──
