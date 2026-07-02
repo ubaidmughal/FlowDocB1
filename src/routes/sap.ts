@@ -227,18 +227,42 @@ router.post('/api/sap/fetch-gl-accounts', async (_req: Request, res: Response) =
 
 /**
  * GET /api/ui/gl-accounts
- * Returns the saved Chart of Accounts data.
+ * Returns the saved Chart of Accounts data with selections.
  */
 router.get('/api/ui/gl-accounts', (_req: Request, res: Response) => {
   const filePath = path.join(DATA_DIR, 'gl_accounts.json');
+  const selPath = path.join(DATA_DIR, 'gl_selections.json');
   if (!fs.existsSync(filePath)) {
-    return res.json({ accounts: [], fetchedAt: null, count: 0 });
+    return res.json({ accounts: [], fetchedAt: null, count: 0, selectedCodes: [] });
   }
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    return res.json(JSON.parse(raw));
+    const data = JSON.parse(raw);
+    let selectedCodes: string[] = [];
+    if (fs.existsSync(selPath)) {
+      selectedCodes = JSON.parse(fs.readFileSync(selPath, 'utf-8'));
+    }
+    return res.json({ ...data, selectedCodes, count: data.accounts?.length || 0 });
   } catch {
-    return res.json({ accounts: [], fetchedAt: null, count: 0 });
+    return res.json({ accounts: [], fetchedAt: null, count: 0, selectedCodes: [] });
+  }
+});
+
+/**
+ * POST /api/ui/gl-selections
+ * Saves selected GL account codes.
+ */
+router.post('/api/ui/gl-selections', (req: Request, res: Response) => {
+  try {
+    const { selectedCodes } = req.body;
+    if (!Array.isArray(selectedCodes)) {
+      return res.status(400).json({ error: 'selectedCodes must be an array' });
+    }
+    const selPath = path.join(DATA_DIR, 'gl_selections.json');
+    fs.writeFileSync(selPath, JSON.stringify(selectedCodes, null, 2));
+    return res.json({ saved: true, count: selectedCodes.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message });
   }
 });
 

@@ -230,6 +230,16 @@
     <h1>SAP G/L Accounts</h1>
     <p class="subtitle">Chart of Accounts — select a root account</p>
     <div class="gl-meta" id="gl-meta"></div>
+    <div style="margin-bottom:12px;display:flex;gap:16px;align-items:center;" id="gl-filter-bar">
+      <span style="font-size:13px;color:var(--muted);">Show:</span>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="gl-filter" value="all" checked onchange="applyGlFilter()"> All
+      </label>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="gl-filter" value="selected" onchange="applyGlFilter()"> Selected Only
+      </label>
+      <span style="font-size:12px;color:var(--muted);margin-left:8px;" id="gl-selected-count"></span>
+    </div>
     <div class="split-view" style="height:calc(100vh - 200px);">
       <div class="file-list-panel" id="gl-root-panel" style="width:280px;">
         <h3>Root Accounts</h3>
@@ -839,19 +849,20 @@ document.getElementById('btn-fetch-gl')?.addEventListener('click', async () => {
   btn.disabled = false;
 });
 
-// ── SAP G/L Tree ──
-function buildTree(accounts, parentCode) {
+// ── SAP G/L Tree (always expanded, with checkboxes) ──
+function buildTree(accounts, parentCode, selectedCodes) {
   const children = accounts.filter(a => a.FatherAccountKey === parentCode);
   if (!children.length) return '';
   return children.map(acc => {
     const hasKids = accounts.some(a => a.FatherAccountKey === acc.Code);
+    const checked = selectedCodes.includes(acc.Code) ? ' checked' : '';
     return `<div class="tree-node">
-      <div class="node-row${hasKids ? '' : ' leaf'}" data-code="${acc.Code}">
-        <span class="toggle">${hasKids ? '▶' : ''}</span>
+      <div class="node-row" data-code="${acc.Code}">
+        <input type="checkbox" class="gl-check" data-code="${acc.Code}"${checked} style="margin-right:6px;accent-color:var(--accent);">
         <span class="code">${acc.Code}</span>
         <span class="name">${acc.Name || ''} <span style="color:var(--muted);font-size:11px;">${acc.FormatCode || ''}</span></span>
       </div>
-      <div class="tree-children">${hasKids ? buildTree(accounts, acc.Code) : ''}</div>
+      <div class="tree-children expanded">${hasKids ? buildTree(accounts, acc.Code, selectedCodes) : ''}</div>
     </div>`;
   }).join('');
 }
@@ -864,33 +875,33 @@ async function loadGlAccounts() {
     const rootList = document.getElementById('gl-root-list');
     const treeContent = document.getElementById('gl-tree-content');
     const treePanel = document.getElementById('gl-tree-panel');
+    const filterBar = document.getElementById('gl-filter-bar');
 
     if (!data.accounts || !data.accounts.length) {
       meta.textContent = '';
+      filterBar.style.display = 'none';
       rootList.innerHTML = '<div class="empty"><p style="font-size:13px;">No data. Use API Tester → Get SAP G/L to fetch.</p></div>';
       treeContent.innerHTML = '';
       treePanel.querySelector('.empty').style.display = 'block';
       return;
     }
 
-    // Store accounts globally for tree building
+    filterBar.style.display = 'flex';
     window._glAccounts = data.accounts;
+    window._glSelectedCodes = data.selectedCodes || [];
     const roots = data.accounts.filter(a => !a.FatherAccountKey);
 
-    meta.textContent = `${data.count || data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+    meta.textContent = `${data.accounts.length} accounts · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+    updateSelectionCount();
 
-    // Render root account boxes
-    rootList.innerHTML = roots.length
-      ? roots.map(r => `
-        <div class="root-account" data-code="${r.Code}">
-          <div class="code">${r.Code}</div>
-          <div class="name">${r.Name || ''}</div>
-          ${r.FormatCode ? `<div class="format">${r.FormatCode}</div>` : ''}
-        </div>
-      `).join('')
-      : '<div class="empty"><p>No root accounts found</p></div>';
+    rootList.innerHTML = roots.map(r => `
+      <div class="root-account" data-code="${r.Code}">
+        <div class="code">${r.Code}</div>
+        <div class="name">${r.Name || ''}</div>
+        ${r.FormatCode ? `<div class="format">${r.FormatCode}</div>` : ''}
+      </div>
+    `).join('');
 
-    // Wire up clicks on root boxes
     rootList.querySelectorAll('.root-account').forEach(box => {
       box.addEventListener('click', () => {
         rootList.querySelectorAll('.root-account').forEach(b => b.classList.remove('active'));
@@ -899,36 +910,74 @@ async function loadGlAccounts() {
         treeContent.style.display = 'block';
         const code = box.dataset.code;
         const root = data.accounts.find(a => a.Code === code);
-        const hasKids = data.accounts.some(a => a.FatherAccountKey === code);
         treeContent.innerHTML = `
           <h3 style="margin-bottom:12px;font-size:15px;">
             <span style="color:var(--accent);">${root?.Code || code}</span>
             ${root?.Name ? ' — ' + root.Name : ''}
           </h3>
-          ${hasKids ? buildTree(data.accounts, code) : '<p style="color:var(--muted);">No sub-accounts</p>'}
+          <div class="tree-node">
+            <div class="node-row" data-code="${root?.Code || code}">
+              <input type="checkbox" class="gl-check" data-code="${root?.Code || code}"${window._glSelectedCodes.includes(root?.Code) ? ' checked' : ''} style="margin-right:6px;accent-color:var(--accent);">
+              <span class="code">${root?.Code || code}</span>
+              <span class="name">${root?.Name || ''}</span>
+            </div>
+            ${buildTree(data.accounts, code, window._glSelectedCodes)}
+          </div>
         `;
-        // Wire up toggles
-        treeContent.querySelectorAll('.node-row').forEach(row => {
-          row.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            const toggle = row.querySelector('.toggle');
-            const children = row.parentElement.querySelector('.tree-children');
-            if (children) {
-              const expanded = children.classList.toggle('expanded');
-              toggle.classList.toggle('expanded', expanded);
-              toggle.textContent = expanded ? '▼' : '▶';
-            }
-          });
-        });
+        // Wire checkboxes
+        wireGlChecks();
       });
     });
 
-    // Reset right panel
     treeContent.style.display = 'none';
     treePanel.querySelector('.empty').style.display = 'block';
   } catch (err) {
     console.error(err);
   }
+}
+
+function wireGlChecks() {
+  document.querySelectorAll('.gl-check').forEach(cb => {
+    cb.removeEventListener('change', onGlCheckChange);
+    cb.addEventListener('change', onGlCheckChange);
+  });
+}
+
+async function onGlCheckChange() {
+  const code = this.dataset.code;
+  if (this.checked) {
+    if (!window._glSelectedCodes.includes(code)) window._glSelectedCodes.push(code);
+  } else {
+    window._glSelectedCodes = window._glSelectedCodes.filter(c => c !== code);
+  }
+  updateSelectionCount();
+  // Persist
+  try {
+    await fetch('/api/ui/gl-selections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selectedCodes: window._glSelectedCodes }),
+    });
+  } catch {}
+}
+
+function updateSelectionCount() {
+  const el = document.getElementById('gl-selected-count');
+  if (el) el.textContent = `(${window._glSelectedCodes?.length || 0} selected)`;
+}
+
+function applyGlFilter() {
+  const filter = document.querySelector('input[name="gl-filter"]:checked')?.value || 'all';
+  document.querySelectorAll('.tree-node .node-row').forEach(row => {
+    const code = row.dataset.code;
+    const node = row.parentElement;
+    if (filter === 'selected') {
+      const checked = row.querySelector('.gl-check')?.checked;
+      node.style.display = checked ? '' : 'none';
+    } else {
+      node.style.display = '';
+    }
+  });
 }
 
 // ── Init ──
