@@ -269,6 +269,10 @@
         📋 Get SAP G/L
       </button>
       <span id="gl-status" style="margin-left:12px;font-size:13px;"></span>
+      <button id="btn-push-gl" style="background:var(--accent2);color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-left:12px;">
+        📤 Push Selected to FlowDoc
+      </button>
+      <span id="push-gl-status" style="margin-left:12px;font-size:13px;"></span>
     </div>
     <div id="test-result" style="display:none;">
       <pre class="json-viewer" id="test-result-json"></pre>
@@ -843,6 +847,23 @@ document.getElementById('btn-fetch-gl')?.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Fetch failed');
     status.textContent = `✅ ${data.count} accounts saved (${data.companyDb})`;
+  } catch (err) {
+    status.textContent = '❌ ' + err.message;
+  }
+  btn.disabled = false;
+});
+
+// ── Push Selected to FlowDoc ──
+document.getElementById('btn-push-gl')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-push-gl');
+  const status = document.getElementById('push-gl-status');
+  btn.disabled = true;
+  status.textContent = '⏳ Pushing...';
+  try {
+    const res = await fetch('/api/sap/push-gl-selections', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Push failed');
+    status.textContent = `✅ ${data.pushed} accounts pushed to FlowDoc`;
   } catch (err) {
     status.textContent = '❌ ' + err.message;
   }

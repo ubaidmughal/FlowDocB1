@@ -266,4 +266,38 @@ router.post('/api/ui/gl-selections', (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/sap/push-gl-selections
+ * Pushes selected GL accounts to FlowDoc master data.
+ */
+router.post('/api/sap/push-gl-selections', async (_req: Request, res: Response) => {
+  try {
+    const selPath = path.join(DATA_DIR, 'gl_selections.json');
+    const accountsPath = path.join(DATA_DIR, 'gl_accounts.json');
+
+    if (!fs.existsSync(selPath) || !fs.existsSync(accountsPath)) {
+      return res.status(400).json({ error: 'No GL data or selections found. Fetch G/L first.' });
+    }
+
+    const selectedCodes: string[] = JSON.parse(fs.readFileSync(selPath, 'utf-8'));
+    if (!selectedCodes.length) {
+      return res.status(400).json({ error: 'No accounts selected.' });
+    }
+
+    const { accounts } = JSON.parse(fs.readFileSync(accountsPath, 'utf-8'));
+    const items = selectedCodes
+      .map(code => {
+        const acc = accounts.find((a: any) => a.Code === code);
+        return acc ? { code: acc.Code, name: acc.Name } : null;
+      })
+      .filter(Boolean) as Array<{ code: string; name: string }>;
+
+    const result = await flowDocClient.pushMasterData('gl_accounts', items);
+    return res.json({ pushed: items.length, message: result.message || `${items.length} accounts pushed` });
+  } catch (error: any) {
+    console.error('[PushGL] Error:', error.message);
+    return res.status(502).json({ error: error.message });
+  }
+});
+
 export default router;

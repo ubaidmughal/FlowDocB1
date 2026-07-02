@@ -122,6 +122,14 @@ export class FlowDocClient {
       filename,
     };
   }
+
+  /**
+   * Pushes master data (GL accounts, etc.) to FlowDoc.
+   */
+  async pushMasterData(type: string, items: Array<{ code: string; name: string }>): Promise<any> {
+    const response = await this.client.post('/api/erp/master-data', { type, items });
+    return response.data;
+  }
 }
 
 /** Shared singleton instance */
