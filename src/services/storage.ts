@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { ClaimResponse } from './flowdoc';
 
-const DATA_DIR = path.resolve(__dirname, '../../data');
+const DATA_DIR = path.resolve(__dirname, '../../data/claims');
 
 /**
  * Saves the raw claim response to a timestamped JSON file.

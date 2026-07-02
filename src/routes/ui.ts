@@ -4,7 +4,7 @@ import path from 'path';
 import { flowDocClient } from '../services/flowdoc';
 
 const router = Router();
-const DATA_DIR = path.resolve(__dirname, '../../data');
+const DATA_DIR = path.resolve(__dirname, '../../data/claims');
 
 /**
  * GET /api/ui/dashboard

@@ -6,7 +6,7 @@ import { flowDocClient } from '../services/flowdoc';
 import { config } from '../config';
 
 const ATTACHMENTS_DIR = 'C:\\SAP\\attachments';
-const DATA_DIR = path.resolve(__dirname, '../../data');
+const DATA_DIR = path.resolve(__dirname, '../../data/gl');
 
 const router = Router();
 
