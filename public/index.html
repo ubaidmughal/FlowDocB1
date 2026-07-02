@@ -928,6 +928,8 @@ async function loadGlAccounts() {
         `;
         // Wire checkboxes
         wireGlChecks();
+        // Apply current filter
+        applyGlFilter();
       });
     });
 
@@ -991,12 +993,14 @@ function applyGlFilter() {
     }
   }
 
-  // Filter tree nodes by data-code attribute
+  // Filter tree nodes — use getAttribute for reliability
   if (container) {
     container.querySelectorAll('.tree-node').forEach(node => {
       const row = node.querySelector('.node-row');
-      const code = row?.dataset?.code;
-      node.style.display = (code && visible.has(code)) ? '' : 'none';
+      const code = row ? row.getAttribute('data-code') : null;
+      if (code) {
+        node.style.display = visible.has(code) ? '' : 'none';
+      }
     });
   }
 
