@@ -849,16 +849,19 @@ document.getElementById('btn-fetch-gl')?.addEventListener('click', async () => {
   btn.disabled = false;
 });
 
-// ── SAP G/L Tree (always expanded, with checkboxes) ──
+// ── SAP G/L Tree (checkboxes only on leaf nodes) ──
 function buildTree(accounts, parentCode, selectedCodes) {
   const children = accounts.filter(a => a.FatherAccountKey === parentCode);
   if (!children.length) return '';
   return children.map(acc => {
     const hasKids = accounts.some(a => a.FatherAccountKey === acc.Code);
-    const checked = selectedCodes.includes(acc.Code) ? ' checked' : '';
+    const checked = !hasKids && selectedCodes.includes(acc.Code) ? ' checked' : '';
     return `<div class="tree-node">
       <div class="node-row" data-code="${acc.Code}">
-        <input type="checkbox" class="gl-check" data-code="${acc.Code}"${checked} style="margin-right:6px;accent-color:var(--accent);">
+        ${hasKids
+          ? `<span style="display:inline-block;width:22px;"></span>`
+          : `<input type="checkbox" class="gl-check" data-code="${acc.Code}"${checked} style="margin-right:6px;accent-color:var(--accent);">`
+        }
         <span class="code">${acc.Code}</span>
         <span class="name">${acc.Name || ''} <span style="color:var(--muted);font-size:11px;">${acc.FormatCode || ''}</span></span>
       </div>
@@ -896,8 +899,7 @@ async function loadGlAccounts() {
 
     rootList.innerHTML = roots.map(r => `
       <div class="root-account" data-code="${r.Code}">
-        <div class="code">${r.Code}</div>
-        <div class="name">${r.Name || ''}</div>
+        <div class="code">📁 ${r.Name || r.Code}</div>
         ${r.FormatCode ? `<div class="format">${r.FormatCode}</div>` : ''}
       </div>
     `).join('');
@@ -917,7 +919,7 @@ async function loadGlAccounts() {
           </h3>
           <div class="tree-node">
             <div class="node-row" data-code="${root?.Code || code}">
-              <input type="checkbox" class="gl-check" data-code="${root?.Code || code}"${window._glSelectedCodes.includes(root?.Code) ? ' checked' : ''} style="margin-right:6px;accent-color:var(--accent);">
+              <span style="display:inline-block;width:22px;">📂</span>
               <span class="code">${root?.Code || code}</span>
               <span class="name">${root?.Name || ''}</span>
             </div>
