@@ -355,6 +355,19 @@ export class SapB1Client {
     console.log(`[SAP] Fetched ${data.value?.length || 0} profit centers`);
     return data.value || [];
   }
+
+  /**
+   * Fetches all Sales Tax Codes from SAP.
+   */
+  async getSalesTaxCodes(sessionId: string): Promise<any[]> {
+    console.log(`[SAP] Fetching Sales Tax Codes...`);
+    const data = await this.get(
+      `/SalesTaxCodes?$select=Code,Name,Rate&$top=500&$orderby=Code`,
+      sessionId
+    );
+    console.log(`[SAP] Fetched ${data.value?.length || 0} tax codes`);
+    return data.value || [];
+  }
 }
 
 /** Shared singleton instance */

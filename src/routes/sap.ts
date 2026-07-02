@@ -367,4 +367,55 @@ router.post('/api/sap/push-pc-selections', async (_req: Request, res: Response) 
   } catch (error: any) { return res.status(502).json({ error: error.message }); }
 });
 
+// ═══════════ Sales Tax Codes ═══════════
+
+const TAX_DIR = path.resolve(__dirname, '../../data/tax');
+
+router.post('/api/sap/fetch-tax-codes', async (_req: Request, res: Response) => {
+  let sessionId: string | null = null;
+  try {
+    sessionId = await sapB1Client.login();
+    const codes = await sapB1Client.getSalesTaxCodes(sessionId);
+    if (!fs.existsSync(TAX_DIR)) fs.mkdirSync(TAX_DIR, { recursive: true });
+    fs.writeFileSync(path.join(TAX_DIR, 'tax_codes.json'), JSON.stringify({ codes, fetchedAt: new Date().toISOString(), companyDb: config.sapB1.companyDb }, null, 2));
+    return res.json({ count: codes.length, companyDb: config.sapB1.companyDb });
+  } catch (error: any) { return res.status(502).json({ error: error.message }); }
+  finally { if (sessionId) { try { await sapB1Client.logout(sessionId); } catch {} } }
+});
+
+router.get('/api/ui/tax-codes', (_req: Request, res: Response) => {
+  const fp = path.join(TAX_DIR, 'tax_codes.json');
+  const sp = path.join(TAX_DIR, 'tax_selections.json');
+  if (!fs.existsSync(fp)) return res.json({ codes: [], selectedCodes: [], count: 0 });
+  try {
+    const data = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const sel = fs.existsSync(sp) ? JSON.parse(fs.readFileSync(sp, 'utf-8')) : [];
+    return res.json({ ...data, selectedCodes: sel, count: data.codes?.length || 0 });
+  } catch { return res.json({ codes: [], selectedCodes: [], count: 0 }); }
+});
+
+router.post('/api/ui/tax-selections', (req: Request, res: Response) => {
+  try {
+    const { selectedCodes } = req.body;
+    if (!Array.isArray(selectedCodes)) return res.status(400).json({ error: 'invalid' });
+    if (!fs.existsSync(TAX_DIR)) fs.mkdirSync(TAX_DIR, { recursive: true });
+    fs.writeFileSync(path.join(TAX_DIR, 'tax_selections.json'), JSON.stringify(selectedCodes, null, 2));
+    return res.json({ saved: true, count: selectedCodes.length });
+  } catch (error: any) { return res.status(500).json({ error: error.message }); }
+});
+
+router.post('/api/sap/push-tax-selections', async (_req: Request, res: Response) => {
+  try {
+    const sp = path.join(TAX_DIR, 'tax_selections.json');
+    const fp = path.join(TAX_DIR, 'tax_codes.json');
+    if (!fs.existsSync(sp) || !fs.existsSync(fp)) return res.status(400).json({ error: 'No data. Fetch tax codes first.' });
+    const codes: string[] = JSON.parse(fs.readFileSync(sp, 'utf-8'));
+    if (!codes.length) return res.status(400).json({ error: 'No codes selected.' });
+    const { codes: all } = JSON.parse(fs.readFileSync(fp, 'utf-8'));
+    const items = codes.map(c => { const t = all.find((x: any) => x.Code === c); return t ? { code: t.Code, name: t.Name, rate: t.Rate } : null; }).filter(Boolean) as any[];
+    const result = await flowDocClient.pushMasterData('tax_codes', items);
+    return res.json({ pushed: items.length, flowDocResponse: result });
+  } catch (error: any) { return res.status(502).json({ error: error.message }); }
+});
+
 export default router;

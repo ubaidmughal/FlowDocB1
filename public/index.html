@@ -195,6 +195,9 @@
   <a href="#" data-page="profit-centers">
     <span class="nav-icon">🏢</span> <span>Profit Centers</span>
   </a>
+  <a href="#" data-page="tax-codes">
+    <span class="nav-icon">💰</span> <span>Tax Codes</span>
+  </a>
   <a href="#" data-page="api-tester">
     <span class="nav-icon">🧪</span> <span>API Tester</span>
   </a>
@@ -296,6 +299,26 @@
     </div>
   </section>
 
+  <!-- TAX CODES PAGE -->
+  <section id="page-tax-codes" class="page" style="display:none;">
+    <h1>Sales Tax Codes</h1>
+    <p class="subtitle">Select tax codes for FlowDoc sync</p>
+    <div class="gl-meta" id="tax-meta"></div>
+    <div style="margin-bottom:12px;display:flex;gap:16px;align-items:center;">
+      <span style="font-size:13px;color:var(--muted);">Show:</span>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="tax-filter" value="all" checked onchange="applyTaxFilter()"> All
+      </label>
+      <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="radio" name="tax-filter" value="selected" onchange="applyTaxFilter()"> Selected Only
+      </label>
+      <span style="font-size:12px;color:var(--muted);" id="tax-selected-count"></span>
+    </div>
+    <div class="card" id="tax-list" style="max-height:calc(100vh - 240px);overflow-y:auto;">
+      <div class="empty"><div class="icon">💰</div><p>No data. Use API Tester → Get SAP Tax to fetch.</p></div>
+    </div>
+  </section>
+
   <!-- API TESTER PAGE -->
   <section id="page-api-tester" class="page" style="display:none;">
     <h1>API Tester</h1>
@@ -328,6 +351,17 @@
         📤 Push Selected PC
       </button>
       <span id="push-pc-status" style="margin-left:12px;font-size:13px;"></span>
+    </div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="label" style="margin-bottom:12px;">FETCH SAP Sales Tax Codes</div>
+      <button id="btn-fetch-tax" style="background:var(--accent3);color:#000;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;">
+        💰 Get SAP Tax
+      </button>
+      <span id="tax-status" style="margin-left:12px;font-size:13px;"></span>
+      <button id="btn-push-tax" style="background:var(--accent2);color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-left:12px;">
+        📤 Push Selected Tax
+      </button>
+      <span id="push-tax-status" style="margin-left:12px;font-size:13px;"></span>
     </div>
     <div id="test-result" style="display:none;">
       <pre class="json-viewer" id="test-result-json"></pre>
@@ -365,6 +399,7 @@ document.querySelectorAll('nav a').forEach(link => {
     if (page === 'saved-data') loadFileList();
     if (page === 'gl-accounts') loadGlAccounts();
     if (page === 'profit-centers') loadProfitCenters();
+    if (page === 'tax-codes') loadTaxCodes();
   });
 });
 
@@ -1197,6 +1232,91 @@ function applyPcFilter() {
     } else {
       row.style.display = '';
     }
+  });
+}
+
+// ── Sales Tax Codes ──
+document.getElementById('btn-fetch-tax')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-fetch-tax');
+  const status = document.getElementById('tax-status');
+  btn.disabled = true; status.textContent = '⏳ Fetching...';
+  try {
+    const res = await fetch('/api/sap/fetch-tax-codes', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = `✅ ${data.count} codes saved (${data.companyDb})`;
+  } catch (err) { status.textContent = '❌ ' + err.message; }
+  btn.disabled = false;
+});
+
+document.getElementById('btn-push-tax')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-push-tax');
+  const status = document.getElementById('push-tax-status');
+  btn.disabled = true; status.textContent = '⏳ Pushing...';
+  try {
+    const res = await fetch('/api/sap/push-tax-selections', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    status.textContent = `✅ ${data.pushed} codes pushed to FlowDoc`;
+  } catch (err) { status.textContent = '❌ ' + err.message; }
+  btn.disabled = false;
+});
+
+async function loadTaxCodes() {
+  try {
+    const res = await fetch('/api/ui/tax-codes');
+    const data = await res.json();
+    const meta = document.getElementById('tax-meta');
+    const list = document.getElementById('tax-list');
+    if (!data.codes?.length) {
+      meta.textContent = '';
+      list.innerHTML = '<div class="empty"><div class="icon">💰</div><p>No data. Use API Tester → Get SAP Tax to fetch.</p></div>';
+      return;
+    }
+    window._taxData = data.codes;
+    window._taxSelected = data.selectedCodes || [];
+    meta.textContent = `${data.codes.length} codes · ${data.companyDb || ''} · fetched ${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : ''}`;
+    updateTaxCount();
+    renderTaxList();
+  } catch (err) { console.error(err); }
+}
+
+function renderTaxList() {
+  const list = document.getElementById('tax-list');
+  const codes = window._taxData || [];
+  const sel = window._taxSelected || [];
+  list.innerHTML = `
+    <table class="invoice-table" style="font-size:13px;">
+      <thead><tr><th style="width:30px;"></th><th>Code</th><th>Name</th><th>Rate</th></tr></thead>
+      <tbody>${codes.map(c => `
+        <tr>
+          <td><input type="checkbox" class="tax-check" data-code="${c.Code}" ${sel.includes(c.Code) ? 'checked' : ''} style="accent-color:var(--accent);"></td>
+          <td><strong style="color:var(--accent);">${c.Code}</strong></td>
+          <td>${c.Name || ''}</td>
+          <td>${c.Rate != null ? c.Rate + '%' : ''}</td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+  `;
+  list.querySelectorAll('.tax-check').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const code = cb.dataset.code;
+      const arr = window._taxSelected || [];
+      if (cb.checked) { if (!arr.includes(code)) arr.push(code); }
+      else { window._taxSelected = arr.filter(c => c !== code); }
+      updateTaxCount();
+      try { await fetch('/api/ui/tax-selections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selectedCodes: window._taxSelected }) }); } catch {}
+    });
+  });
+  applyTaxFilter();
+}
+
+function updateTaxCount() { const el = document.getElementById('tax-selected-count'); if (el) el.textContent = `(${window._taxSelected?.length || 0} selected)`; }
+
+function applyTaxFilter() {
+  const filter = document.querySelector('input[name="tax-filter"]:checked')?.value || 'all';
+  document.querySelectorAll('#tax-list tbody tr').forEach(row => {
+    row.style.display = filter === 'selected' && !row.querySelector('.tax-check')?.checked ? 'none' : '';
   });
 }
 
