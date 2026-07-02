@@ -112,7 +112,7 @@
   .tree-node .name { flex: 1; }
   .tree-node .level-badge { font-size: 10px; color: var(--muted); margin-left: 8px; }
   .tree-children { display: none; margin-left: 20px; }
-  .tree-children.expanded { display: block; }
+  .tree-children.expanded { display: block; padding-left: 2px; }
   .gl-meta { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
 
   /* Root account boxes */
@@ -860,7 +860,7 @@ function buildTree(accounts, parentCode, selectedCodes) {
       <div class="node-row" data-code="${acc.Code}">
         ${hasKids
           ? `<span style="display:inline-block;width:22px;"></span>`
-          : `<input type="checkbox" class="gl-check" data-code="${acc.Code}"${checked} style="margin-right:6px;accent-color:var(--accent);">`
+          : `<input type="checkbox" class="gl-check" data-code="${acc.Code}"${checked} style="margin:0 8px 0 2px;accent-color:var(--accent);">`
         }
         <span class="code">${acc.Code}</span>
         <span class="name">${acc.Name || ''} <span style="color:var(--muted);font-size:11px;">${acc.FormatCode || ''}</span></span>
