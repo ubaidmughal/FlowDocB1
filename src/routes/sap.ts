@@ -293,7 +293,7 @@ router.post('/api/sap/push-gl-selections', async (_req: Request, res: Response) 
       .filter(Boolean) as Array<{ code: string; name: string }>;
 
     const result = await flowDocClient.pushMasterData('gl_accounts', items);
-    return res.json({ pushed: items.length, message: result.message || `${items.length} accounts pushed` });
+    return res.json({ pushed: items.length, flowDocResponse: result });
   } catch (error: any) {
     console.error('[PushGL] Error:', error.message);
     return res.status(502).json({ error: error.message });
@@ -363,7 +363,7 @@ router.post('/api/sap/push-pc-selections', async (_req: Request, res: Response) 
     const { centers } = JSON.parse(fs.readFileSync(fp, 'utf-8'));
     const items = codes.map(c => { const cc = centers.find((x: any) => x.CenterCode === c); return cc ? { code: cc.CenterCode, name: cc.CenterName } : null; }).filter(Boolean) as Array<{ code: string; name: string }>;
     const result = await flowDocClient.pushMasterData('cost_centers', items);
-    return res.json({ pushed: items.length, message: result.message || `${items.length} centers pushed` });
+    return res.json({ pushed: items.length, flowDocResponse: result });
   } catch (error: any) { return res.status(502).json({ error: error.message }); }
 });
 

@@ -1,0 +1,31 @@
+{
+  "centers": [
+    {
+      "CenterCode": "Centr_z",
+      "CenterName": "General Center",
+      "GroupCode": null
+    },
+    {
+      "CenterCode": "Centr_z2",
+      "CenterName": "General Center 2",
+      "GroupCode": null
+    },
+    {
+      "CenterCode": "Centr_z3",
+      "CenterName": "General Center 3",
+      "GroupCode": null
+    },
+    {
+      "CenterCode": "Centr_z4",
+      "CenterName": "General Center 4",
+      "GroupCode": null
+    },
+    {
+      "CenterCode": "Centr_z5",
+      "CenterName": "General Center 5",
+      "GroupCode": null
+    }
+  ],
+  "fetchedAt": "2026-07-02T07:01:54.009Z",
+  "companyDb": "SBO01"
+}
